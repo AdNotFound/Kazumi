@@ -21,7 +21,14 @@ import 'package:kazumi/bean/widget/embedded_native_control_area.dart';
 import 'package:kazumi/pages/download/download_controller.dart';
 import 'package:kazumi/pages/download/download_episode_sheet.dart';
 import 'package:kazumi/modules/download/download_module.dart';
+import 'package:kazumi/modules/search/plugin_search_module.dart';
+import 'package:kazumi/pages/info/info_controller.dart';
+import 'package:kazumi/pages/info/source_sheet.dart';
+import 'package:kazumi/plugins/plugins.dart';
+import 'package:kazumi/plugins/plugins_controller.dart';
+import 'package:kazumi/request/query_manager.dart';
 import 'package:kazumi/utils/timed_shutdown_service.dart';
+import 'package:mobx/mobx.dart';
 
 class VideoPage extends StatefulWidget {
   const VideoPage({super.key});
@@ -39,11 +46,18 @@ class _VideoPageState extends State<VideoPage>
   final HistoryController historyController = Modular.get<HistoryController>();
   final DownloadController downloadController =
       Modular.get<DownloadController>();
+  final PluginsController pluginsController = Modular.get<PluginsController>();
+  final InfoController sourceInfoController = InfoController();
   late bool playResume;
   bool showDebugLog = false;
+  bool _isSelectingSource = false;
+  bool _hasInitializedOnlinePlayback = false;
+  bool _hasAutoSelectedSource = false;
   List<String> webviewLogLines = [];
   StreamSubscription<String>? _logSubscription;
   final FocusNode keyboardFocus = FocusNode();
+  QueryManager? _sourceQueryManager;
+  ReactionDisposer? _sourceSearchDisposer;
 
   ScrollController scrollController = ScrollController();
   late GridObserverController observerController;
@@ -51,6 +65,7 @@ class _VideoPageState extends State<VideoPage>
   late Animation<Offset> _rightOffsetAnimation;
   late Animation<double> _maskOpacityAnimation;
   late TabController tabController;
+  late TabController sourceTabController;
 
   // 当前播放列表
   late int currentRoad;
@@ -68,7 +83,9 @@ class _VideoPageState extends State<VideoPage>
     // Check fullscreen when enter video page
     // in case user use system controls to enter fullscreen outside video page
     videoPageController.isDesktopFullscreen();
-    tabController = TabController(length: 2, vsync: this);
+    tabController = TabController(length: 3, vsync: this);
+    sourceTabController =
+        TabController(length: pluginsController.pluginList.length, vsync: this);
     observerController = GridObserverController(controller: scrollController);
     animation = AnimationController(
       duration: const Duration(milliseconds: 120),
@@ -97,8 +114,8 @@ class _VideoPageState extends State<VideoPage>
       // 离线模式：跳过 WebView 订阅，直接初始化播放器
       _initOfflineMode();
     } else {
-      // 在线模式：设置 WebView 订阅
-      _initOnlineMode();
+      // 在线模式：优先直达播放页，自动检索并播放首个可用视频源
+      _initOnlinePlaybackFlow();
     }
 
     _syncChatSubscription = playerController.syncPlayChatStream.listen((event) {
@@ -153,6 +170,58 @@ class _VideoPageState extends State<VideoPage>
     });
   }
 
+  void _initOnlinePlaybackFlow() {
+    if (videoPageController.roadList.isNotEmpty) {
+      _initOnlineMode();
+      _hasInitializedOnlinePlayback = true;
+      return;
+    }
+
+    currentRoad = 0;
+    videoPageController.loading = true;
+    videoPageController.errorMessage = null;
+    _startSourceSearch();
+  }
+
+  void _startSourceSearch() {
+    final keyword = videoPageController.bangumiItem.nameCn.isEmpty
+        ? videoPageController.bangumiItem.name
+        : videoPageController.bangumiItem.nameCn;
+
+    _hasAutoSelectedSource = false;
+    _isSelectingSource = false;
+    videoPageController.loading = true;
+    videoPageController.errorMessage = null;
+    sourceInfoController.bangumiItem = videoPageController.bangumiItem;
+    sourceInfoController.pluginSearchResponseList.clear();
+    sourceInfoController.pluginSearchStatus.clear();
+    _sourceQueryManager?.cancel();
+    _sourceQueryManager = QueryManager(infoController: sourceInfoController);
+
+    _sourceSearchDisposer?.call();
+    _sourceSearchDisposer = autorun((_) {
+      final responseCount = sourceInfoController.pluginSearchResponseList.length;
+      final statusCount = sourceInfoController.pluginSearchStatus.length;
+      final pendingCount = sourceInfoController.pluginSearchStatus.values
+          .where((status) => status == 'pending')
+          .length;
+
+      if (!_hasAutoSelectedSource && responseCount > 0) {
+        _tryAutoSelectSource();
+        return;
+      }
+
+      final allFinished =
+          statusCount == pluginsController.pluginList.length && pendingCount == 0;
+      if (!_hasAutoSelectedSource && allFinished && responseCount == 0) {
+        videoPageController.loading = false;
+        videoPageController.errorMessage = '未找到可用视频源，请在“来源”页手动切换或重试';
+      }
+    });
+
+    _sourceQueryManager?.queryAllSource(keyword);
+  }
+
   void _initOnlineMode() {
     videoPageController.currentEpisode = 1;
     videoPageController.currentRoad = 0;
@@ -195,6 +264,103 @@ class _VideoPageState extends State<VideoPage>
     });
   }
 
+  Future<void> _tryAutoSelectSource() async {
+    if (_isSelectingSource || _hasAutoSelectedSource) {
+      return;
+    }
+
+    PluginSearchResponse? response;
+    for (final item in sourceInfoController.pluginSearchResponseList) {
+      if (item.data.isNotEmpty) {
+        response = item;
+        break;
+      }
+    }
+    if (response == null) {
+      return;
+    }
+
+    Plugin? plugin;
+    for (final item in pluginsController.pluginList) {
+      if (item.name == response!.pluginName) {
+        plugin = item;
+        break;
+      }
+    }
+    if (plugin == null) {
+      return;
+    }
+
+    _isSelectingSource = true;
+    _hasAutoSelectedSource = true;
+    try {
+      await videoPageController.selectSource(
+        bangumiItem: sourceInfoController.bangumiItem,
+        plugin: plugin,
+        searchItem: response.data.first,
+      );
+      if (!mounted) {
+        return;
+      }
+      await _handleSourceSelected(isInitialSelection: true);
+    } catch (e) {
+      KazumiLogger().w('VideoPage: auto select source failed', error: e);
+      videoPageController.loading = false;
+      videoPageController.errorMessage = '自动切换视频源失败，请在“来源”页手动选择';
+      _hasAutoSelectedSource = false;
+    } finally {
+      _isSelectingSource = false;
+    }
+  }
+
+  Future<void> _handleSourceSelected({bool isInitialSelection = false}) async {
+    _hasAutoSelectedSource = true;
+    if (videoPageController.roadList.isEmpty) {
+      videoPageController.loading = false;
+      videoPageController.errorMessage = '当前来源暂无可播放剧集，请切换其他来源';
+      return;
+    }
+
+    if (!_hasInitializedOnlinePlayback || isInitialSelection) {
+      _initOnlineMode();
+      _hasInitializedOnlinePlayback = true;
+      if (mounted && tabController.index != 0) {
+        tabController.animateTo(0);
+      }
+      return;
+    }
+
+    final int targetEpisode = videoPageController.currentEpisode <=
+            videoPageController.roadList.first.data.length
+        ? videoPageController.currentEpisode
+        : 1;
+
+    setState(() {
+      currentRoad = 0;
+    });
+
+    await changeEpisode(targetEpisode, currentRoad: 0);
+    if (mounted && tabController.index != 0) {
+      tabController.animateTo(0);
+    }
+  }
+
+  void _reloadCurrentSource() {
+    if (videoPageController.isOfflineMode) {
+      changeEpisode(videoPageController.currentEpisode,
+          currentRoad: videoPageController.currentRoad);
+      return;
+    }
+
+    if (videoPageController.roadList.isEmpty) {
+      _startSourceSearch();
+      return;
+    }
+
+    changeEpisode(videoPageController.currentEpisode,
+        currentRoad: videoPageController.currentRoad);
+  }
+
   @override
   void dispose() {
     try {
@@ -211,6 +377,12 @@ class _VideoPageState extends State<VideoPage>
     } catch (_) {}
     try {
       _logSubscription?.cancel();
+    } catch (_) {}
+    try {
+      _sourceSearchDisposer?.call();
+    } catch (_) {}
+    try {
+      _sourceQueryManager?.cancel();
     } catch (_) {}
     try {
       playerController.dispose();
@@ -231,6 +403,7 @@ class _VideoPageState extends State<VideoPage>
     // 重置离线模式
     videoPageController.resetOfflineMode();
     Utils.unlockScreenRotation();
+    sourceTabController.dispose();
     tabController.dispose();
     // Cancel timed shutdown when leaving anime page
     TimedShutdownService().cancel();
@@ -595,17 +768,7 @@ class _VideoPageState extends State<VideoPage>
               : MediaQuery.sizeOf(context).width / 3),
       child: Container(
         color: Theme.of(context).canvasColor,
-        child: GridViewObserver(
-          controller: observerController,
-          child: (Utils.isDesktop() || Utils.isTablet())
-              ? tabBody
-              : Column(
-                  children: [
-                    menuBar,
-                    menuBody,
-                  ],
-                ),
-        ),
+        child: tabBody,
       ),
     );
   }
@@ -660,6 +823,25 @@ class _VideoPageState extends State<VideoPage>
                                         color: Colors.white, fontSize: 16),
                                     textAlign: TextAlign.center,
                                   ),
+                                ),
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  alignment: WrapAlignment.center,
+                                  children: [
+                                    FilledButton.tonal(
+                                      onPressed: _reloadCurrentSource,
+                                      child: const Text('重新尝试'),
+                                    ),
+                                    if (!videoPageController.isOfflineMode)
+                                      FilledButton(
+                                        onPressed: () {
+                                          tabController.animateTo(1);
+                                        },
+                                        child: const Text('切换来源'),
+                                      ),
+                                  ],
                                 ),
                               ],
                             )
@@ -728,8 +910,7 @@ class _VideoPageState extends State<VideoPage>
                             icon: const Icon(Icons.refresh_outlined,
                                 color: Colors.white),
                             onPressed: () {
-                              changeEpisode(videoPageController.currentEpisode,
-                                  currentRoad: videoPageController.currentRoad);
+                              _reloadCurrentSource();
                             },
                           ),
                           Visibility(
@@ -795,9 +976,21 @@ class _VideoPageState extends State<VideoPage>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(' 合集 '),
+          if (!videoPageController.isOfflineMode &&
+              videoPageController.title.isNotEmpty) ...[
+            Text(
+              '${videoPageController.currentPlugin.name} · ',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
           Expanded(
             child: Text(
-              videoPageController.title,
+              videoPageController.title.isEmpty
+                  ? '正在检索可用视频源'
+                  : videoPageController.title,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
@@ -1018,26 +1211,37 @@ class _VideoPageState extends State<VideoPage>
   }
 
   Widget get tabBody {
-    int episodeNum = 0;
-    episodeNum = Utils.extractEpisodeNumber(videoPageController
-        .roadList[videoPageController.currentRoad]
-        .identifier[videoPageController.currentEpisode - 1]);
-    if (episodeNum == 0 ||
-        (!videoPageController.isOfflineMode &&
-            episodeNum >
-                videoPageController
-                    .roadList[videoPageController.currentRoad]
-                    .identifier
-                    .length)) {
-      episodeNum = videoPageController.isOfflineMode
-          ? videoPageController.actualEpisodeNumber
-          : videoPageController.currentEpisode;
+    int episodeNum = videoPageController.isOfflineMode
+        ? videoPageController.actualEpisodeNumber
+        : videoPageController.currentEpisode;
+    final bool hasCurrentRoad = videoPageController.roadList.isNotEmpty &&
+        videoPageController.currentRoad < videoPageController.roadList.length;
+    final bool hasCurrentEpisode = hasCurrentRoad &&
+        videoPageController.currentEpisode > 0 &&
+        videoPageController.currentEpisode <=
+            videoPageController
+                .roadList[videoPageController.currentRoad].identifier.length;
+    if (hasCurrentEpisode) {
+      episodeNum = Utils.extractEpisodeNumber(videoPageController
+          .roadList[videoPageController.currentRoad]
+          .identifier[videoPageController.currentEpisode - 1]);
+      if (episodeNum == 0 ||
+          (!videoPageController.isOfflineMode &&
+              episodeNum >
+                  videoPageController
+                      .roadList[videoPageController.currentRoad]
+                      .identifier
+                      .length)) {
+        episodeNum = videoPageController.isOfflineMode
+            ? videoPageController.actualEpisodeNumber
+            : videoPageController.currentEpisode;
+      }
     }
 
     return Container(
       color: Theme.of(context).canvasColor,
       child: DefaultTabController(
-        length: 2,
+        length: 3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1057,6 +1261,7 @@ class _VideoPageState extends State<VideoPage>
                   },
                   tabs: const [
                     Tab(text: '选集'),
+                    Tab(text: '来源'),
                     Tab(text: '评论'),
                   ],
                 ),
@@ -1148,6 +1353,13 @@ class _VideoPageState extends State<VideoPage>
                           ),
                         ),
                     ],
+                  ),
+                  SourceSheet(
+                    tabController: sourceTabController,
+                    infoController: sourceInfoController,
+                    autoQueryOnInit: false,
+                    navigateToVideoPage: false,
+                    onSourceSelected: _handleSourceSelected,
                   ),
                   EpisodeInfo(
                     episode: episodeNum,

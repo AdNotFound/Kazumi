@@ -9,8 +9,6 @@ import 'package:kazumi/utils/constants.dart';
 import 'package:kazumi/utils/storage.dart';
 import 'package:kazumi/pages/info/info_controller.dart';
 import 'package:kazumi/bean/card/bangumi_info_card.dart';
-import 'package:kazumi/pages/info/source_sheet.dart';
-import 'package:kazumi/plugins/plugins_controller.dart';
 import 'package:kazumi/pages/video/video_controller.dart';
 import 'package:kazumi/bean/card/network_img_layer.dart';
 import 'package:kazumi/utils/logger.dart';
@@ -34,8 +32,6 @@ class _InfoPageState extends State<InfoPage> with TickerProviderStateMixin {
   final InfoController infoController = InfoController();
   final VideoPageController videoPageController =
       Modular.get<VideoPageController>();
-  final PluginsController pluginsController = Modular.get<PluginsController>();
-  late TabController sourceTabController;
   late TabController infoTabController;
   late bool showRating;
 
@@ -133,8 +129,6 @@ class _InfoPageState extends State<InfoPage> with TickerProviderStateMixin {
         infoController.bangumiItem.votesCount.isEmpty) {
       queryBangumiInfoByID(infoController.bangumiItem.id, type: 'attach');
     }
-    sourceTabController =
-        TabController(length: pluginsController.pluginList.length, vsync: this);
     infoTabController = TabController(length: 5, vsync: this);
     showRating = GStorage.setting.get(SettingBoxKey.showRating, defaultValue: true);
     infoTabController.addListener(() {
@@ -162,7 +156,6 @@ class _InfoPageState extends State<InfoPage> with TickerProviderStateMixin {
     infoController.staffList.clear();
     infoController.pluginSearchResponseList.clear();
     videoPageController.currentEpisode = 1;
-    sourceTabController.dispose();
     infoTabController.dispose();
     super.dispose();
   }
@@ -359,26 +352,16 @@ class _InfoPageState extends State<InfoPage> with TickerProviderStateMixin {
             icon: const Icon(Icons.play_arrow_rounded),
             label: Text('开始观看'),
             onPressed: () async {
-              showModalBottomSheet(
-                isScrollControlled: true,
-                constraints: BoxConstraints(
-                  maxHeight: (MediaQuery.sizeOf(context).height >=
-                          LayoutBreakpoint.compact['height']!)
-                      ? MediaQuery.of(context).size.height * 3 / 4
-                      : MediaQuery.of(context).size.height,
-                  maxWidth: (MediaQuery.sizeOf(context).width >=
-                          LayoutBreakpoint.medium['width']!)
-                      ? MediaQuery.of(context).size.width * 9 / 16
-                      : MediaQuery.of(context).size.width,
-                ),
-                clipBehavior: Clip.antiAlias,
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                showDragHandle: true,
-                context: context,
-                builder: (context) {
-                  return SourceSheet(tabController: sourceTabController, infoController: infoController);
-                },
-              );
+              videoPageController.resetOfflineMode();
+              videoPageController.bangumiItem = infoController.bangumiItem;
+              videoPageController.roadList.clear();
+              videoPageController.title = '';
+              videoPageController.src = '';
+              videoPageController.loading = true;
+              videoPageController.errorMessage = null;
+              videoPageController.currentEpisode = 1;
+              videoPageController.currentRoad = 0;
+              Modular.to.pushNamed('/video/');
             },
           ),
         ),

@@ -22,10 +22,16 @@ class SourceSheet extends StatefulWidget {
     super.key,
     required this.tabController,
     required this.infoController,
+    this.autoQueryOnInit = true,
+    this.navigateToVideoPage = true,
+    this.onSourceSelected,
   });
 
   final TabController tabController;
   final InfoController infoController;
+  final bool autoQueryOnInit;
+  final bool navigateToVideoPage;
+  final Future<void> Function()? onSourceSelected;
 
   @override
   State<SourceSheet> createState() => _SourceSheetState();
@@ -54,7 +60,9 @@ class _SourceSheetState extends State<SourceSheet>
         ? widget.infoController.bangumiItem.name
         : widget.infoController.bangumiItem.nameCn;
     queryManager = QueryManager(infoController: widget.infoController);
-    queryManager?.queryAllSource(keyword);
+    if (widget.autoQueryOnInit) {
+      queryManager?.queryAllSource(keyword);
+    }
     super.initState();
   }
 
@@ -644,16 +652,23 @@ class _SourceSheetState extends State<SourceSheet>
                                       videoPageController.cancelQueryRoads();
                                     },
                                   );
-                                  videoPageController.bangumiItem =
-                                      widget.infoController.bangumiItem;
-                                  videoPageController.currentPlugin = plugin;
-                                  videoPageController.title = searchItem.name;
-                                  videoPageController.src = searchItem.src;
                                   try {
-                                    await videoPageController.queryRoads(
-                                        searchItem.src, plugin.name);
+                                    await videoPageController.selectSource(
+                                      bangumiItem:
+                                          widget.infoController.bangumiItem,
+                                      plugin: plugin,
+                                      searchItem: searchItem,
+                                    );
                                     KazumiDialog.dismiss();
-                                    Modular.to.pushNamed('/video/');
+                                    if (widget.navigateToVideoPage) {
+                                      Modular.to.pushNamed('/video/');
+                                    } else {
+                                      final onSourceSelected =
+                                          widget.onSourceSelected;
+                                      if (onSourceSelected != null) {
+                                        await onSourceSelected();
+                                      }
+                                    }
                                   } catch (_) {
                                     KazumiLogger().w(
                                         "QueryManager: failed to query video playlist");

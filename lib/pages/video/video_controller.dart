@@ -17,6 +17,7 @@ import 'package:kazumi/utils/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:kazumi/modules/bangumi/episode_item.dart';
 import 'package:kazumi/modules/comments/comment_item.dart';
+import 'package:kazumi/modules/search/plugin_search_module.dart';
 import 'package:kazumi/request/bangumi.dart';
 import 'package:dio/dio.dart';
 import 'package:hive_ce/hive.dart';
@@ -180,6 +181,19 @@ abstract class _VideoPageController with Store {
       }
     }
     return currentEpisode;
+  }
+
+  Future<void> selectSource({
+    required BangumiItem bangumiItem,
+    required Plugin plugin,
+    required SearchItem searchItem,
+  }) async {
+    this.bangumiItem = bangumiItem;
+    currentPlugin = plugin;
+    currentRoad = 0;
+    title = searchItem.name;
+    src = searchItem.src;
+    await queryRoads(searchItem.src, plugin.name);
   }
 
   Future<void> changeEpisode(int episode,
