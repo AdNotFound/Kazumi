@@ -66,6 +66,7 @@ class _VideoPageState extends State<VideoPage>
   late Animation<double> _maskOpacityAnimation;
   late TabController tabController;
   late TabController sourceTabController;
+  int detailSectionIndex = 0;
 
   // 当前播放列表
   late int currentRoad;
@@ -83,7 +84,7 @@ class _VideoPageState extends State<VideoPage>
     // Check fullscreen when enter video page
     // in case user use system controls to enter fullscreen outside video page
     videoPageController.isDesktopFullscreen();
-    tabController = TabController(length: 3, vsync: this);
+    tabController = TabController(length: 2, vsync: this);
     sourceTabController =
         TabController(length: pluginsController.pluginList.length, vsync: this);
     observerController = GridObserverController(controller: scrollController);
@@ -456,6 +457,11 @@ class _VideoPageState extends State<VideoPage>
     await playerController.stop();
     await videoPageController.changeEpisode(episode,
         currentRoad: currentRoad, offset: offset);
+    if (mounted) {
+      setState(() {
+        this.currentRoad = currentRoad;
+      });
+    }
   }
 
   void menuJumpToCurrentEpisode() {
@@ -472,7 +478,42 @@ class _VideoPageState extends State<VideoPage>
       if (!disableAnimations) {
         animation.forward();
       }
+      if (detailSectionIndex == 0) {
+        menuJumpToCurrentEpisode();
+      }
+    }
+  }
+
+  void _ensureDetailPanelVisible() {
+    if (tabController.index != 0) {
+      tabController.animateTo(0);
+    }
+    if (!videoPageController.showTabBody) {
+      videoPageController.showTabBody = true;
+      openTabBodyAnimated();
+    }
+  }
+
+  void _openDetailSection(int index) {
+    setState(() {
+      detailSectionIndex = index;
+      if (index == 0) {
+        currentRoad = videoPageController.currentRoad;
+      }
+    });
+    _ensureDetailPanelVisible();
+    if (index == 0) {
       menuJumpToCurrentEpisode();
+    }
+  }
+
+  void _openCommentsPanel() {
+    if (tabController.index != 1) {
+      tabController.animateTo(1);
+    }
+    if (!videoPageController.showTabBody) {
+      videoPageController.showTabBody = true;
+      openTabBodyAnimated();
     }
   }
 
@@ -517,6 +558,289 @@ class _VideoPageState extends State<VideoPage>
     if (playerController.playing) {
       playerController.pause();
     }
+  }
+
+  String get _bangumiTitle {
+    return videoPageController.bangumiItem.nameCn.isNotEmpty
+        ? videoPageController.bangumiItem.nameCn
+        : videoPageController.bangumiItem.name;
+  }
+
+  String get _currentEpisodeTitle {
+    if (videoPageController.roadList.isEmpty ||
+        videoPageController.currentRoad >= videoPageController.roadList.length ||
+        videoPageController.currentEpisode <= 0 ||
+        videoPageController.currentEpisode >
+            videoPageController
+                .roadList[videoPageController.currentRoad].identifier.length) {
+      return '当前剧集';
+    }
+    return videoPageController
+        .roadList[videoPageController.currentRoad]
+        .identifier[videoPageController.currentEpisode - 1];
+  }
+
+  String get _currentSourceTitle {
+    if (videoPageController.isOfflineMode) {
+      return videoPageController.offlinePluginName.isNotEmpty
+          ? videoPageController.offlinePluginName
+          : '本地视频';
+    }
+    try {
+      return videoPageController.currentPlugin.name;
+    } catch (_) {
+      return '未知来源';
+    }
+  }
+
+  String get _currentRoadTitle {
+    if (videoPageController.roadList.isEmpty ||
+        videoPageController.currentRoad >= videoPageController.roadList.length) {
+      return '播放列表';
+    }
+    return videoPageController.roadList[videoPageController.currentRoad].name;
+  }
+
+  Widget _buildDetailMetaChip({
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailQuickAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return FilledButton.tonalIcon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+  }
+
+  Widget _buildDetailOverview(int episodeNum) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _bangumiTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '第$episodeNum集 · $_currentEpisodeTitle',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildDetailMetaChip(
+                  icon: Icons.hub_outlined, label: '来源：$_currentSourceTitle'),
+              _buildDetailMetaChip(
+                  icon: Icons.list_rounded, label: '线路：$_currentRoadTitle'),
+              _buildDetailMetaChip(
+                  icon: Icons.speed_rounded,
+                  label: '倍速 ${playerController.playerSpeed}x'),
+              _buildDetailMetaChip(
+                  icon: Icons.aspect_ratio_rounded,
+                  label:
+                      '比例 ${aspectRatioTypeMap[playerController.aspectRatioType] ?? '自动'}'),
+              _buildDetailMetaChip(
+                  icon: playerController.danmakuOn
+                      ? Icons.subtitles_rounded
+                      : Icons.subtitles_off_rounded,
+                  label: playerController.danmakuOn ? '弹幕开启' : '弹幕关闭'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailActions() {
+    final int playingRoad = videoPageController.currentRoad;
+    final bool hasRoad = videoPageController.roadList.isNotEmpty &&
+        playingRoad < videoPageController.roadList.length;
+    final int episodeCount = hasRoad
+        ? videoPageController.roadList[playingRoad].data.length
+        : 0;
+    final bool canPlayPrev = hasRoad && videoPageController.currentEpisode > 1;
+    final bool canPlayNext = hasRoad &&
+        videoPageController.currentEpisode < episodeCount;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _buildDetailQuickAction(
+            icon: Icons.skip_previous_rounded,
+            label: '上一集',
+            onPressed: canPlayPrev
+                ? () {
+                    changeEpisode(videoPageController.currentEpisode - 1,
+                        currentRoad: videoPageController.currentRoad);
+                  }
+                : null,
+          ),
+          _buildDetailQuickAction(
+            icon: Icons.skip_next_rounded,
+            label: '下一集',
+            onPressed: canPlayNext
+                ? () {
+                    changeEpisode(videoPageController.currentEpisode + 1,
+                        currentRoad: videoPageController.currentRoad);
+                  }
+                : null,
+          ),
+          if (!videoPageController.isOfflineMode)
+            _buildDetailQuickAction(
+              icon: Icons.swap_horiz_rounded,
+              label: '切换来源',
+              onPressed: () {
+                _openDetailSection(1);
+              },
+            ),
+          _buildDetailQuickAction(
+            icon: Icons.comment_bank_outlined,
+            label: '本集评论',
+            onPressed: _openCommentsPanel,
+          ),
+          if (!videoPageController.isOfflineMode)
+            _buildDetailQuickAction(
+              icon: Icons.download_rounded,
+              label: '下载剧集',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (context) => DownloadEpisodeSheet(road: currentRoad),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailSectionSwitcher() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          ChoiceChip(
+            label: const Text('选集'),
+            selected: detailSectionIndex == 0,
+            onSelected: (_) {
+              _openDetailSection(0);
+            },
+          ),
+          if (!videoPageController.isOfflineMode)
+            ChoiceChip(
+              label: const Text('来源'),
+              selected: detailSectionIndex == 1,
+              onSelected: (_) {
+                _openDetailSection(1);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEpisodeSectionBody() {
+    return Stack(
+      children: [
+        GridViewObserver(
+          controller: observerController,
+          child: Column(
+            children: [
+              menuBar,
+              menuBody,
+            ],
+          ),
+        ),
+        if (!videoPageController.isOfflineMode)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton(
+              child: const Icon(Icons.download_rounded),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (context) => DownloadEpisodeSheet(road: currentRoad),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDetailTab(int episodeNum) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDetailOverview(episodeNum),
+        _buildDetailActions(),
+        _buildDetailSectionSwitcher(),
+        Expanded(
+          child: IndexedStack(
+            index: detailSectionIndex,
+            children: [
+              _buildEpisodeSectionBody(),
+              if (!videoPageController.isOfflineMode)
+                SourceSheet(
+                  tabController: sourceTabController,
+                  infoController: sourceInfoController,
+                  autoQueryOnInit: false,
+                  navigateToVideoPage: false,
+                  onSourceSelected: _handleSourceSelected,
+                )
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   /// 发送弹幕 由于接口限制, 暂时未提交云端
@@ -837,7 +1161,7 @@ class _VideoPageState extends State<VideoPage>
                                     if (!videoPageController.isOfflineMode)
                                       FilledButton(
                                         onPressed: () {
-                                          tabController.animateTo(1);
+                                          _openDetailSection(1);
                                         },
                                         child: const Text('切换来源'),
                                       ),
@@ -966,7 +1290,7 @@ class _VideoPageState extends State<VideoPage>
                                     color: Colors.white),
                                 tooltip: '切换来源',
                                 onPressed: () {
-                                  tabController.animateTo(1);
+                                  _openDetailSection(1);
                                   if (!videoPageController.showTabBody) {
                                     videoPageController.showTabBody = true;
                                     openTabBodyAnimated();
@@ -1302,7 +1626,7 @@ class _VideoPageState extends State<VideoPage>
     return Container(
       color: Theme.of(context).canvasColor,
       child: DefaultTabController(
-        length: 3,
+        length: 2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1316,13 +1640,12 @@ class _VideoPageState extends State<VideoPage>
                   labelPadding:
                       const EdgeInsetsDirectional.only(start: 30, end: 30),
                   onTap: (index) {
-                    if (index == 0) {
+                    if (index == 0 && detailSectionIndex == 0) {
                       menuJumpToCurrentEpisode();
                     }
                   },
                   tabs: const [
-                    Tab(text: '选集'),
-                    Tab(text: '来源'),
+                    Tab(text: '详情'),
                     Tab(text: '评论'),
                   ],
                 ),
@@ -1387,42 +1710,7 @@ class _VideoPageState extends State<VideoPage>
               child: TabBarView(
                 controller: tabController,
                 children: [
-                  Stack(
-                    children: [
-                      GridViewObserver(
-                        controller: observerController,
-                        child: Column(
-                          children: [
-                            menuBar,
-                            menuBody,
-                          ],
-                        ),
-                      ),
-                      if (!videoPageController.isOfflineMode)
-                        Positioned(
-                          right: 16,
-                          bottom: 16,
-                          child: FloatingActionButton(
-                            child: const Icon(Icons.download_rounded),
-                            onPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                builder: (context) =>
-                                    DownloadEpisodeSheet(road: currentRoad),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                  SourceSheet(
-                    tabController: sourceTabController,
-                    infoController: sourceInfoController,
-                    autoQueryOnInit: false,
-                    navigateToVideoPage: false,
-                    onSourceSelected: _handleSourceSelected,
-                  ),
+                  _buildDetailTab(episodeNum),
                   EpisodeInfo(
                     episode: episodeNum,
                     child: EpisodeCommentsSheet(),
