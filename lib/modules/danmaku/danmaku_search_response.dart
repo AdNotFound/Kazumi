@@ -22,16 +22,21 @@ class DanmakuAnime {
   });
 
   factory DanmakuAnime.fromJson(Map<String, dynamic> json) {
+    final startDateValue = json['startDate']?.toString();
+    final ratingValue = json['rating'];
     return DanmakuAnime(
-      animeId: json['animeId'],
-      animeTitle: json['animeTitle'],
-      type: json['type'],
-      typeDescription: json['typeDescription'],
-      imageUrl: json['imageUrl'],
-      startDate: DateTime.parse(json['startDate']),
-      episodeCount: json['episodeCount'],
-      rating: json['rating'].toDouble(),
-      isFavorited: json['isFavorited'],
+      animeId: json['animeId'] ?? 0,
+      animeTitle: json['animeTitle']?.toString() ?? '',
+      type: json['type']?.toString() ?? '',
+      typeDescription: json['typeDescription']?.toString() ?? '',
+      imageUrl: json['imageUrl']?.toString() ?? '',
+      startDate: startDateValue == null || startDateValue.isEmpty
+          ? DateTime.fromMillisecondsSinceEpoch(0)
+          : DateTime.tryParse(startDateValue) ??
+              DateTime.fromMillisecondsSinceEpoch(0),
+      episodeCount: json['episodeCount'] ?? 0,
+      rating: ratingValue is num ? ratingValue.toDouble() : 0,
+      isFavorited: json['isFavorited'] ?? false,
     );
   }
 
@@ -64,14 +69,17 @@ class DanmakuSearchResponse {
   });
 
   factory DanmakuSearchResponse.fromJson(Map<String, dynamic> json) {
-    var list = json['animes'] as List;
-    List<DanmakuAnime> animeList = list.map((i) => DanmakuAnime.fromJson(i)).toList();
+    final list = json['animes'] as List<dynamic>? ?? const [];
+    final animeList = list
+        .whereType<Map<String, dynamic>>()
+        .map((i) => DanmakuAnime.fromJson(i))
+        .toList();
 
     return DanmakuSearchResponse(
       animes: animeList,
-      errorCode: json['errorCode'],
-      success: json['success'],
-      errorMessage: json['errorMessage'],
+      errorCode: json['errorCode'] ?? 0,
+      success: json['success'] ?? false,
+      errorMessage: json['errorMessage']?.toString() ?? '',
     );
   }
 

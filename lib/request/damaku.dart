@@ -113,11 +113,13 @@ class DanmakuRequest {
         extra: {'customError': '弹幕检索错误: 获取弹幕失败'});
 
     Map<String, dynamic> jsonData = res.data;
-    List<dynamic> comments = jsonData['comments'];
+    List<dynamic> comments = jsonData['comments'] as List<dynamic>? ?? const [];
 
     for (var comment in comments) {
-      Danmaku danmaku = Danmaku.fromJson(comment);
-      danmakus.add(danmaku);
+      if (comment is Map<String, dynamic>) {
+        Danmaku danmaku = Danmaku.fromJson(comment);
+        danmakus.add(danmaku);
+      }
     }
     return danmakus;
   }
@@ -133,11 +135,13 @@ class DanmakuRequest {
         data: withRelated,
         extra: {'customError': '弹幕检索错误: 获取弹幕失败'});
     Map<String, dynamic> jsonData = res.data;
-    List<dynamic> comments = jsonData['comments'];
+    List<dynamic> comments = jsonData['comments'] as List<dynamic>? ?? const [];
 
     for (var comment in comments) {
-      Danmaku danmaku = Danmaku.fromJson(comment);
-      danmakus.add(danmaku);
+      if (comment is Map<String, dynamic>) {
+        Danmaku danmaku = Danmaku.fromJson(comment);
+        danmakus.add(danmaku);
+      }
     }
     return danmakus;
   }
