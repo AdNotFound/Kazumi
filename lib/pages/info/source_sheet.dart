@@ -54,12 +54,19 @@ class _SourceSheetState extends State<SourceSheet>
   /// Timeout timer waiting for captcha verification result
   Timer? _captchaVerifyTimer;
 
+  void _handleTabControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void initState() {
     keyword = widget.infoController.bangumiItem.nameCn == ''
         ? widget.infoController.bangumiItem.name
         : widget.infoController.bangumiItem.nameCn;
     queryManager = QueryManager(infoController: widget.infoController);
+    widget.tabController.addListener(_handleTabControllerChanged);
     if (widget.autoQueryOnInit) {
       queryManager?.queryAllSource(keyword);
     }
@@ -68,6 +75,7 @@ class _SourceSheetState extends State<SourceSheet>
 
   @override
   void dispose() {
+    widget.tabController.removeListener(_handleTabControllerChanged);
     queryManager?.cancel();
     queryManager = null;
     _captchaProvider?.dispose();
@@ -405,6 +413,68 @@ class _SourceSheetState extends State<SourceSheet>
     return 0;
   }
 
+  Widget _buildSourceTabChip({
+    required BuildContext context,
+    required Plugin plugin,
+    required bool selected,
+  }) {
+    final status = widget.infoController.pluginSearchStatus[plugin.name];
+    final count = _resultCountOfPlugin(plugin.name);
+    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = selected
+        ? colorScheme.primaryContainer
+        : colorScheme.surfaceContainerHighest;
+    final foregroundColor = selected
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onSurfaceVariant;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: selected
+              ? colorScheme.primary.withValues(alpha: 0.35)
+              : colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              plugin.name,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: foregroundColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: _statusColor(status),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            count > 0 ? '$count' : _statusText(status),
+            style: TextStyle(
+              fontSize: 11,
+              color: foregroundColor.withValues(alpha: 0.82),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget buildPluginView(Plugin plugin, List<Widget> cardList) {
     final status =
         widget.infoController.pluginSearchStatus[plugin.name];
@@ -697,56 +767,37 @@ class _SourceSheetState extends State<SourceSheet>
               ),
             );
           }),
-          Row(
-              children: [
-                Expanded(
-                  child: TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    dividerHeight: 0,
-                    controller: widget.tabController,
-                    tabs: pluginsController.pluginList
-                        .map(
-                          (plugin) => Observer(
-                            builder: (context) {
-                              final status =
-                                  widget.infoController.pluginSearchStatus[plugin.name];
-                              final count = _resultCountOfPlugin(plugin.name);
-                              return Tab(
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      plugin.name,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      width: 8.0,
-                                      height: 8.0,
-                                      decoration: BoxDecoration(
-                                        color: _statusColor(status),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      count > 0 ? '$count' : _statusText(status),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Theme.of(context).colorScheme.outline,
-                                      ),
-                                    )
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ],
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
             ),
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              dividerHeight: 0,
+              indicatorColor: Colors.transparent,
+              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              padding: EdgeInsets.zero,
+              labelPadding: const EdgeInsets.only(right: 8),
+              controller: widget.tabController,
+              tabs: List.generate(pluginsController.pluginList.length, (index) {
+                final plugin = pluginsController.pluginList[index];
+                return Tab(
+                  height: 46,
+                  child: Observer(
+                    builder: (context) => _buildSourceTabChip(
+                      context: context,
+                      plugin: plugin,
+                      selected: widget.tabController.index == index,
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
             const Divider(height: 1),
             Expanded(
               child: Observer(
@@ -761,77 +812,196 @@ class _SourceSheetState extends State<SourceSheet>
                       if (searchResponse.pluginName == plugin.name) {
                         for (var i = 0; i < searchResponse.data.length; i++) {
                           final searchItem = searchResponse.data[i];
+                          final isCurrent =
+                              !videoPageController.isOfflineMode &&
+                                  videoPageController.currentPlugin.name ==
+                                      plugin.name &&
+                                  videoPageController.src == searchItem.src;
                           cardList.add(
-                            Card(
-                              elevation: 0,
+                            Container(
                               margin: const EdgeInsets.only(
                                   left: 12, right: 12, top: 10),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: () async {
-                                  KazumiDialog.showLoading(
-                                    msg: '获取中',
-                                    barrierDismissible: Utils.isDesktop(),
-                                    onDismiss: () {
-                                      videoPageController.cancelQueryRoads();
-                                    },
-                                  );
-                                  try {
-                                    await videoPageController.selectSource(
-                                      bangumiItem:
-                                          widget.infoController.bangumiItem,
-                                      plugin: plugin,
-                                      searchItem: searchItem,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () async {
+                                    KazumiDialog.showLoading(
+                                      msg: '获取中',
+                                      barrierDismissible: Utils.isDesktop(),
+                                      onDismiss: () {
+                                        videoPageController.cancelQueryRoads();
+                                      },
                                     );
-                                    KazumiDialog.dismiss();
-                                    if (widget.navigateToVideoPage) {
-                                      Modular.to.pushNamed('/video/');
-                                    } else {
-                                      final onSourceSelected =
-                                          widget.onSourceSelected;
-                                      if (onSourceSelected != null) {
-                                        await onSourceSelected();
+                                    try {
+                                      await videoPageController.selectSource(
+                                        bangumiItem:
+                                            widget.infoController.bangumiItem,
+                                        plugin: plugin,
+                                        searchItem: searchItem,
+                                      );
+                                      KazumiDialog.dismiss();
+                                      if (widget.navigateToVideoPage) {
+                                        Modular.to.pushNamed('/video/');
+                                      } else {
+                                        final onSourceSelected =
+                                            widget.onSourceSelected;
+                                        if (onSourceSelected != null) {
+                                          await onSourceSelected();
+                                        }
                                       }
+                                    } catch (_) {
+                                      KazumiLogger().w(
+                                          "QueryManager: failed to query video playlist");
+                                      KazumiDialog.dismiss();
                                     }
-                                  } catch (_) {
-                                    KazumiLogger().w(
-                                        "QueryManager: failed to query video playlist");
-                                    KazumiDialog.dismiss();
-                                  }
-                                },
-                                child: ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 8),
-                                  leading: CircleAvatar(
-                                    radius: 14,
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer,
-                                    child: Text(
-                                      '${i + 1}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onPrimaryContainer,
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .primaryContainer
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isCurrent
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .outlineVariant
+                                                .withValues(alpha: 0.45),
                                       ),
                                     ),
-                                  ),
-                                  title: Text(
-                                    searchItem.name,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  subtitle: searchItem.src.isEmpty
-                                      ? null
-                                      : Text(
-                                          searchItem.src,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 34,
+                                          height: 34,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: isCurrent
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .surfaceContainerHighest,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            '${i + 1}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: isCurrent
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .onPrimary
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                            ),
+                                          ),
                                         ),
-                                  trailing:
-                                      const Icon(Icons.play_circle_fill_rounded),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      searchItem.name,
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontWeight: isCurrent
+                                                            ? FontWeight.w700
+                                                            : FontWeight.w600,
+                                                        color: isCurrent
+                                                            ? Theme.of(context)
+                                                                .colorScheme
+                                                                .primary
+                                                            : null,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (isCurrent) ...[
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .primary,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                                999),
+                                                      ),
+                                                      child: Text(
+                                                        '当前',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: Theme.of(context)
+                                                              .colorScheme
+                                                              .onPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                searchItem.src.isEmpty
+                                                    ? '点击切换到该来源'
+                                                    : searchItem.src,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Icon(
+                                          isCurrent
+                                              ? Icons.check_circle_rounded
+                                              : Icons.play_circle_fill_rounded,
+                                          color: isCurrent
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                              : Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

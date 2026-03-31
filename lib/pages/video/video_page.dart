@@ -635,6 +635,56 @@ class _VideoPageState extends State<VideoPage>
     );
   }
 
+  Widget _buildDetailSegmentButton({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected
+                  ? colorScheme.primaryContainer
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: selected
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDetailOverview(int episodeNum) {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
@@ -758,28 +808,44 @@ class _VideoPageState extends State<VideoPage>
   }
 
   Widget _buildDetailSectionSwitcher() {
+    final currentRoadCount = videoPageController.roadList.isNotEmpty &&
+            currentRoad < videoPageController.roadList.length
+        ? videoPageController.roadList[currentRoad].data.length
+        : 0;
+    final sourceCount = sourceInfoController.pluginSearchResponseList.fold<int>(
+        0, (sum, item) => sum + item.data.length);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          ChoiceChip(
-            label: const Text('选集'),
-            selected: detailSectionIndex == 0,
-            onSelected: (_) {
-              _openDetailSection(0);
-            },
-          ),
-          if (!videoPageController.isOfflineMode)
-            ChoiceChip(
-              label: const Text('来源'),
-              selected: detailSectionIndex == 1,
-              onSelected: (_) {
-                _openDetailSection(1);
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            _buildDetailSegmentButton(
+              icon: Icons.grid_view_rounded,
+              label: '选集${currentRoadCount > 0 ? ' · $currentRoadCount' : ''}',
+              selected: detailSectionIndex == 0,
+              onTap: () {
+                _openDetailSection(0);
               },
             ),
-        ],
+            if (!videoPageController.isOfflineMode) ...[
+              const SizedBox(width: 6),
+              _buildDetailSegmentButton(
+                icon: Icons.hub_rounded,
+                label: '来源${sourceCount > 0 ? ' · $sourceCount' : ''}',
+                selected: detailSectionIndex == 1,
+                onTap: () {
+                  _openDetailSection(1);
+                },
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1356,84 +1422,89 @@ class _VideoPageState extends State<VideoPage>
   }
 
   Widget get menuBar {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(' 合集 '),
-          if (!videoPageController.isOfflineMode &&
-              videoPageController.title.isNotEmpty) ...[
-            Text(
-              '${videoPageController.currentPlugin.name} · ',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.primary,
+          Row(
+            children: [
+              Icon(Icons.video_library_outlined,
+                  size: 18, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                '选集列表',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Spacer(),
+              Text(
+                '${videoPageController.roadList.isNotEmpty && currentRoad < videoPageController.roadList.length ? videoPageController.roadList[currentRoad].data.length : 0} 集',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            videoPageController.title.isEmpty
+                ? '正在检索可用视频源'
+                : videoPageController.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+          ),
+          if (videoPageController.roadList.length > 1) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 36,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: videoPageController.roadList.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final selected = currentRoad == index;
+                  final road = videoPageController.roadList[index];
+                  return FilterChip(
+                    selected: selected,
+                    showCheckmark: false,
+                    avatar: Icon(
+                      Icons.route_rounded,
+                      size: 16,
+                      color: selected
+                          ? colorScheme.onSecondaryContainer
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    label: Text('${road.name} · ${road.data.length}'),
+                    onSelected: (_) {
+                      setState(() {
+                        currentRoad = index;
+                      });
+                    },
+                    selectedColor: colorScheme.secondaryContainer,
+                    backgroundColor: colorScheme.surfaceContainerHighest,
+                    labelStyle: TextStyle(
+                      color: selected
+                          ? colorScheme.onSecondaryContainer
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                    side: BorderSide.none,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  );
+                },
               ),
             ),
           ],
-          Expanded(
-            child: Text(
-              videoPageController.title.isEmpty
-                  ? '正在检索可用视频源'
-                  : videoPageController.title,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          MenuAnchor(
-            consumeOutsideTap: true,
-            builder: (_, MenuController controller, __) {
-              return SizedBox(
-                height: 34,
-                child: TextButton(
-                  style: ButtonStyle(
-                    padding: WidgetStateProperty.all(EdgeInsets.zero),
-                  ),
-                  onPressed: () {
-                    if (controller.isOpen) {
-                      controller.close();
-                    } else {
-                      controller.open();
-                    }
-                  },
-                  child: Text(
-                    '播放列表${currentRoad + 1} ',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              );
-            },
-            menuChildren: List<MenuItemButton>.generate(
-              videoPageController.roadList.length,
-              (int i) => MenuItemButton(
-                onPressed: () {
-                  setState(() {
-                    currentRoad = i;
-                  });
-                },
-                child: Container(
-                  height: 48,
-                  constraints: BoxConstraints(minWidth: 112),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '播放列表${i + 1}',
-                      style: TextStyle(
-                        color: i == currentRoad
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1498,96 +1569,161 @@ class _VideoPageState extends State<VideoPage>
   Widget get menuBody {
     return Observer(
       builder: (context) {
-        var cardList = <Widget>[];
-        for (var road in videoPageController.roadList) {
-          if (road.name == '播放列表${currentRoad + 1}') {
-            int count = 1;
-            for (var urlItem in road.data) {
-              int count0 = count;
-              cardList.add(Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                child: Material(
-                  color: Theme.of(context).colorScheme.onInverseSurface,
-                  borderRadius: BorderRadius.circular(6),
-                  clipBehavior: Clip.hardEdge,
-                  child: InkWell(
-                    onTap: () async {
-                      if (count0 == videoPageController.currentEpisode &&
-                          videoPageController.currentRoad == currentRoad) {
-                        return;
-                      }
-                      KazumiLogger()
-                          .i('VideoPageController: video URL is $urlItem');
-                      closeTabBodyAnimated();
-                      changeEpisode(count0, currentRoad: currentRoad);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            children: [
-                              if (count0 ==
-                                      (videoPageController.currentEpisode) &&
-                                  currentRoad ==
-                                      videoPageController
-                                          .currentRoad) ...<Widget>[
-                                Image.asset(
-                                  'assets/images/playing.gif',
-                                  color: Theme.of(context).colorScheme.primary,
-                                  height: 12,
-                                ),
-                                const SizedBox(width: 6)
-                              ],
-                              Expanded(
-                                  child: Text(
-                                road.identifier[count0 - 1],
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: (count0 ==
-                                                videoPageController
-                                                    .currentEpisode &&
-                                            currentRoad ==
-                                                videoPageController.currentRoad)
-                                        ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context)
-                                            .colorScheme
-                                            .onSurface),
-                              )),
-                              _buildDownloadStatusIcon(count0, urlItem),
-                              const SizedBox(width: 2),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ));
-              count++;
-            }
-          }
+        if (videoPageController.roadList.isEmpty ||
+            currentRoad >= videoPageController.roadList.length) {
+          return const Expanded(child: SizedBox.shrink());
         }
+        final road = videoPageController.roadList[currentRoad];
         return Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(top: 0, right: 8, left: 8),
-            child: GridView.builder(
-              scrollDirection: Axis.vertical,
-              controller: scrollController,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 5,
-                mainAxisExtent: 70,
-              ),
-              itemCount: cardList.length,
+            padding: const EdgeInsets.only(top: 0, right: 12, left: 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final crossAxisCount = constraints.maxWidth >= 900
+                    ? 3
+                    : constraints.maxWidth >= 560
+                        ? 2
+                        : 1;
+                return GridView.builder(
+                  scrollDirection: Axis.vertical,
+                  controller: scrollController,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: 88,
+                  ),
+                  itemCount: road.data.length,
               itemBuilder: (context, index) {
-                return cardList[index];
+                    final episodeNumber = index + 1;
+                    final urlItem = road.data[index];
+                    final isPlaying =
+                        episodeNumber == videoPageController.currentEpisode &&
+                            currentRoad == videoPageController.currentRoad;
+                    final colorScheme = Theme.of(context).colorScheme;
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () async {
+                          if (isPlaying) {
+                            return;
+                          }
+                          KazumiLogger()
+                              .i('VideoPageController: video URL is $urlItem');
+                          closeTabBodyAnimated();
+                          changeEpisode(episodeNumber, currentRoad: currentRoad);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isPlaying
+                                ? colorScheme.primaryContainer
+                                : colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isPlaying
+                                  ? colorScheme.primary
+                                  : colorScheme.outlineVariant
+                                      .withValues(alpha: 0.45),
+                              width: isPlaying ? 1.4 : 1,
+                            ),
+                            boxShadow: isPlaying
+                                ? [
+                                    BoxShadow(
+                                      color: colorScheme.primary
+                                          .withValues(alpha: 0.12),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    )
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isPlaying
+                                      ? colorScheme.primary
+                                      : colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '$episodeNumber',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: isPlaying
+                                        ? colorScheme.onPrimary
+                                        : colorScheme.onSurface,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        if (isPlaying) ...[
+                                          Icon(
+                                            Icons.play_circle_fill_rounded,
+                                            size: 16,
+                                            color: colorScheme.primary,
+                                          ),
+                                          const SizedBox(width: 4),
+                                        ],
+                                        Expanded(
+                                          child: Text(
+                                            road.identifier[index],
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              height: 1.25,
+                                              fontWeight: isPlaying
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                              color: isPlaying
+                                                  ? colorScheme.primary
+                                                  : colorScheme.onSurface,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          isPlaying ? '正在播放' : '点击切换',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isPlaying
+                                                ? colorScheme.primary
+                                                : colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        _buildDownloadStatusIcon(
+                                            episodeNumber, urlItem),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
               },
             ),
           ),
