@@ -508,16 +508,6 @@ class _VideoPageState extends State<VideoPage>
     }
   }
 
-  void _openCommentsPanel() {
-    if (tabController.index != 1) {
-      tabController.animateTo(1);
-    }
-    if (!videoPageController.showTabBody) {
-      videoPageController.showTabBody = true;
-      openTabBodyAnimated();
-    }
-  }
-
   void closeTabBodyAnimated() {
     if (!disableAnimations) {
       animation.reverse();
@@ -568,6 +558,12 @@ class _VideoPageState extends State<VideoPage>
   }
 
   String get _currentEpisodeTitle {
+    final accurateEpisodeTitle = videoPageController.episodeInfo.nameCn.isNotEmpty
+        ? videoPageController.episodeInfo.nameCn
+        : videoPageController.episodeInfo.name;
+    if (accurateEpisodeTitle.isNotEmpty) {
+      return accurateEpisodeTitle;
+    }
     if (videoPageController.roadList.isEmpty ||
         videoPageController.currentRoad >= videoPageController.roadList.length ||
         videoPageController.currentEpisode <= 0 ||
@@ -777,31 +773,6 @@ class _VideoPageState extends State<VideoPage>
                   }
                 : null,
           ),
-          if (!videoPageController.isOfflineMode)
-            _buildDetailQuickAction(
-              icon: Icons.swap_horiz_rounded,
-              label: '切换来源',
-              onPressed: () {
-                _openDetailSection(1);
-              },
-            ),
-          _buildDetailQuickAction(
-            icon: Icons.comment_bank_outlined,
-            label: '本集评论',
-            onPressed: _openCommentsPanel,
-          ),
-          if (!videoPageController.isOfflineMode)
-            _buildDetailQuickAction(
-              icon: Icons.download_rounded,
-              label: '下载剧集',
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (context) => DownloadEpisodeSheet(road: currentRoad),
-                );
-              },
-            ),
         ],
       ),
     );
