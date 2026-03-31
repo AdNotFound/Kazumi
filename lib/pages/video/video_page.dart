@@ -896,51 +896,112 @@ class _VideoPageState extends State<VideoPage>
                     right: 0,
                     child: EmbeddedNativeControlArea(
                       requireOffset: !videoPageController.isFullscreen,
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back,
-                                color: Colors.white),
-                            onPressed: () => onBackPressed(context),
+                      child: Container(
+                        padding: const EdgeInsets.only(top: 2, bottom: 2),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.55),
+                              Colors.black.withValues(alpha: 0.18),
+                              Colors.transparent,
+                            ],
                           ),
-                          const Expanded(
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back,
+                                  color: Colors.white),
+                              onPressed: () => onBackPressed(context),
+                            ),
+                            Expanded(
                               child: dtb.DragToMoveArea(
-                                  child: SizedBox(height: 40))),
-                          IconButton(
-                            icon: const Icon(Icons.refresh_outlined,
-                                color: Colors.white),
-                            onPressed: () {
-                              _reloadCurrentSource();
-                            },
-                          ),
-                          Visibility(
-                            visible: MediaQuery.sizeOf(context).width >
-                                MediaQuery.sizeOf(context).height,
-                            child: IconButton(
-                              onPressed: () {
-                                videoPageController.showTabBody =
-                                    !videoPageController.showTabBody;
-                                openTabBodyAnimated();
-                              },
-                              icon: Icon(
-                                videoPageController.showTabBody
-                                    ? Icons.menu_open
-                                    : Icons.menu_open_outlined,
-                                color: Colors.white,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 4),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        videoPageController.title.isEmpty
+                                            ? '正在准备播放'
+                                            : videoPageController.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                      Text(
+                                        videoPageController.isOfflineMode
+                                            ? '本地播放'
+                                            : '在线播放',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.82),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                                showDebugLog
-                                    ? Icons.bug_report
-                                    : Icons.bug_report_outlined,
-                                color: Colors.white),
-                            onPressed: () {
-                              switchDebugConsole();
-                            },
-                          ),
-                        ],
+                            IconButton(
+                              icon: const Icon(Icons.refresh_outlined,
+                                  color: Colors.white),
+                              tooltip: '重新加载',
+                              onPressed: _reloadCurrentSource,
+                            ),
+                            if (!videoPageController.isOfflineMode)
+                              IconButton(
+                                icon: const Icon(Icons.swap_horiz_rounded,
+                                    color: Colors.white),
+                                tooltip: '切换来源',
+                                onPressed: () {
+                                  tabController.animateTo(1);
+                                  if (!videoPageController.showTabBody) {
+                                    videoPageController.showTabBody = true;
+                                    openTabBodyAnimated();
+                                  }
+                                },
+                              ),
+                            Visibility(
+                              visible: MediaQuery.sizeOf(context).width >
+                                  MediaQuery.sizeOf(context).height,
+                              child: IconButton(
+                                tooltip: '展开侧栏',
+                                onPressed: () {
+                                  videoPageController.showTabBody =
+                                      !videoPageController.showTabBody;
+                                  openTabBodyAnimated();
+                                },
+                                icon: Icon(
+                                  videoPageController.showTabBody
+                                      ? Icons.menu_open
+                                      : Icons.menu_open_outlined,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                  showDebugLog
+                                      ? Icons.bug_report
+                                      : Icons.bug_report_outlined,
+                                  color: Colors.white),
+                              tooltip: '调试日志',
+                              onPressed: switchDebugConsole,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1270,16 +1331,17 @@ class _VideoPageState extends State<VideoPage>
                   const Spacer(),
                   Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(25),
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: playerController.danmakuOn
                             ? Theme.of(context).hintColor
                             : Theme.of(context).disabledColor,
-                        width: 0.5,
+                        width: 0.8,
                       ),
                     ),
-                    width: 120,
-                    height: 31,
+                    width: 142,
+                    height: 36,
                     child: GestureDetector(
                       onTap: () {
                         if (playerController.danmakuOn &&

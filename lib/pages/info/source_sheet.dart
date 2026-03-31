@@ -375,11 +375,50 @@ class _SourceSheetState extends State<SourceSheet>
     );
   }
 
+  Color _statusColor(String? status) {
+    return switch (status) {
+      'success' => Colors.green,
+      'noResult' => Colors.orange,
+      'captcha' => Colors.blue,
+      'error' => Colors.red,
+      _ => Colors.grey,
+    };
+  }
+
+  String _statusText(String? status) {
+    return switch (status) {
+      'success' => '可用',
+      'noResult' => '无结果',
+      'captcha' => '需验证',
+      'error' => '失败',
+      'pending' => '检索中',
+      _ => '等待中',
+    };
+  }
+
+  int _resultCountOfPlugin(String pluginName) {
+    for (final response in widget.infoController.pluginSearchResponseList) {
+      if (response.pluginName == pluginName) {
+        return response.data.length;
+      }
+    }
+    return 0;
+  }
+
   Widget buildPluginView(Plugin plugin, List<Widget> cardList) {
     final status =
         widget.infoController.pluginSearchStatus[plugin.name];
     if (status == 'pending') {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 12),
+            Text('${plugin.name} 检索中...'),
+          ],
+        ),
+      );
     }
     if (status == 'captcha') {
       return GeneralErrorWidget(
@@ -422,7 +461,32 @@ class _SourceSheetState extends State<SourceSheet>
         ],
       );
     }
-    return ListView(children: cardList);
+    if (cardList.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 48),
+          GeneralErrorWidget(
+            errMsg: '暂无来源，请下拉刷新或切换来源',
+            actions: [
+              GeneralErrorButton(
+                onPressed: () => queryManager?.querySource(keyword, plugin.name),
+                text: '刷新',
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () async {
+        await queryManager?.querySource(keyword, plugin.name);
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: cardList,
+      ),
+    );
   }
 
   void showAliasSearchDialog(String pluginName) {
@@ -552,54 +616,126 @@ class _SourceSheetState extends State<SourceSheet>
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        body: Column(
-          children: [
-            Row(
+    return Scaffold(
+      body: Column(
+        children: [
+          Observer(builder: (context) {
+            final total = pluginsController.pluginList.length;
+            final completed = widget.infoController.pluginSearchStatus.values
+                .where((status) =>
+                    status == 'success' ||
+                    status == 'noResult' ||
+                    status == 'captcha' ||
+                    status == 'error')
+                .length;
+            final totalResults = widget.infoController.pluginSearchResponseList
+                .fold<int>(0, (sum, item) => sum + item.data.length);
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          keyword,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '已完成 $completed/$total · 共 $totalResults 条结果',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '刷新当前来源',
+                    onPressed: () async {
+                      if (pluginsController.pluginList.isEmpty) {
+                        return;
+                      }
+                      final currentIndex = widget.tabController.index;
+                      await queryManager?.querySource(
+                        keyword,
+                        pluginsController.pluginList[currentIndex].name,
+                      );
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                  IconButton(
+                    tooltip: '全部重试',
+                    onPressed: () => queryManager?.queryAllSource(keyword),
+                    icon: const Icon(Icons.restart_alt_rounded),
+                  ),
+                  IconButton(
+                    tooltip: '浏览器打开当前来源',
+                    onPressed: () {
+                      if (pluginsController.pluginList.isEmpty) {
+                        return;
+                      }
+                      final currentIndex = widget.tabController.index;
+                      launchUrl(
+                        Uri.parse(pluginsController
+                            .pluginList[currentIndex].searchURL
+                            .replaceFirst('@keyword', keyword)),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                    icon: const Icon(Icons.open_in_browser_rounded),
+                  ),
+                ],
+              ),
+            );
+          }),
+          Row(
               children: [
                 Expanded(
                   child: TabBar(
                     isScrollable: true,
-                    tabAlignment: TabAlignment.center,
+                    tabAlignment: TabAlignment.start,
                     dividerHeight: 0,
                     controller: widget.tabController,
                     tabs: pluginsController.pluginList
                         .map(
                           (plugin) => Observer(
                             builder: (context) {
+                              final status =
+                                  widget.infoController.pluginSearchStatus[plugin.name];
+                              final count = _resultCountOfPlugin(plugin.name);
                               return Tab(
                                 child: Row(
                                   children: [
                                     Text(
                                       plugin.name,
                                       overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          fontSize: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium!
-                                              .fontSize,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface),
                                     ),
-                                    const SizedBox(width: 5.0),
+                                    const SizedBox(width: 6),
                                     Container(
                                       width: 8.0,
                                       height: 8.0,
                                       decoration: BoxDecoration(
-                                        color: switch (widget.infoController
-                                            .pluginSearchStatus[plugin.name]) {
-                                          'success' => Colors.green,
-                                          'noResult' => Colors.orange,
-                                          'captcha' => Colors.blue,
-                                          'error' => Colors.red,
-                                          _ => Colors.grey,
-                                        },
+                                        color: _statusColor(status),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      count > 0 ? '$count' : _statusText(status),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(context).colorScheme.outline,
+                                      ),
+                                    )
                                   ],
                                 ),
                               );
@@ -609,19 +745,6 @@ class _SourceSheetState extends State<SourceSheet>
                         .toList(),
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    int currentIndex = widget.tabController.index;
-                    launchUrl(
-                      Uri.parse(pluginsController
-                          .pluginList[currentIndex].searchURL
-                          .replaceFirst('@keyword', keyword)),
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
-                  icon: const Icon(Icons.open_in_browser_rounded),
-                ),
-                const SizedBox(width: 4),
               ],
             ),
             const Divider(height: 1),
@@ -636,12 +759,14 @@ class _SourceSheetState extends State<SourceSheet>
                     for (var searchResponse
                         in widget.infoController.pluginSearchResponseList) {
                       if (searchResponse.pluginName == plugin.name) {
-                        for (var searchItem in searchResponse.data) {
+                        for (var i = 0; i < searchResponse.data.length; i++) {
+                          final searchItem = searchResponse.data[i];
                           cardList.add(
                             Card(
                               elevation: 0,
                               margin: const EdgeInsets.only(
-                                  left: 10, right: 10, top: 10),
+                                  left: 12, right: 12, top: 10),
+                              clipBehavior: Clip.antiAlias,
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(12),
                                 onTap: () async {
@@ -675,9 +800,38 @@ class _SourceSheetState extends State<SourceSheet>
                                     KazumiDialog.dismiss();
                                   }
                                 },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Text(searchItem.name),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  leading: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onPrimaryContainer,
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    searchItem.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: searchItem.src.isEmpty
+                                      ? null
+                                      : Text(
+                                          searchItem.src,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  trailing:
+                                      const Icon(Icons.play_circle_fill_rounded),
                                 ),
                               ),
                             ),
@@ -692,7 +846,6 @@ class _SourceSheetState extends State<SourceSheet>
             )
           ],
         ),
-      ),
     );
   }
 }
