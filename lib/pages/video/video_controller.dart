@@ -76,6 +76,10 @@ abstract class _VideoPageController with Store {
   /// 和 bangumiItem 中的标题不同，此标题来自于视频源
   String title = '';
 
+  /// 优先显示 Bangumi 中文标题，否则回退到原始标题
+  String get preferredBangumiTitle =>
+      bangumiItem.nameCn.isNotEmpty ? bangumiItem.nameCn : bangumiItem.name;
+
   String src = '';
 
   @observable

@@ -1325,9 +1325,9 @@ class _VideoPageState extends State<VideoPage>
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        videoPageController.title.isEmpty
+                                        videoPageController.preferredBangumiTitle.isEmpty
                                             ? '正在准备播放'
-                                            : videoPageController.title,
+                                            : videoPageController.preferredBangumiTitle,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -1461,9 +1461,9 @@ class _VideoPageState extends State<VideoPage>
           ),
           const SizedBox(height: 6),
           Text(
-            videoPageController.title.isEmpty
+            videoPageController.preferredBangumiTitle.isEmpty
                 ? '正在检索可用视频源'
-                : videoPageController.title,
+                : videoPageController.preferredBangumiTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
