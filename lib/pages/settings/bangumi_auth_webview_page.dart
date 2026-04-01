@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -23,6 +25,9 @@ class _BangumiAuthWebViewPageState extends State<BangumiAuthWebViewPage> {
   bool isCompleting = false;
   String lastUrl = '';
   String errorText = '';
+
+  bool get _supportsInAppAuth =>
+      Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
   Uri get redirectUri => Uri.parse(session.redirectUri);
 
@@ -94,6 +99,51 @@ class _BangumiAuthWebViewPageState extends State<BangumiAuthWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_supportsInAppAuth) {
+      return Scaffold(
+        appBar: const SysAppBar(title: Text('Bangumi 授权')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.open_in_browser_rounded, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    '当前平台不支持应用内 Bangumi 授权，请改用系统浏览器完成登录。',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    session.authorizeUri.toString(),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: _openExternalBrowser,
+                    icon: const Icon(Icons.open_in_browser_rounded),
+                    label: const Text('打开系统浏览器'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('返回'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: const SysAppBar(title: Text('Bangumi 应用内授权')),
       body: Column(

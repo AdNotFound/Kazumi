@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:hive_ce/hive.dart';
@@ -27,6 +29,9 @@ class _BangumiAuthSettingsPageState extends State<BangumiAuthSettingsPage> {
   String username = '';
   String nickname = '';
   int expiresAt = 0;
+
+  bool get _supportsInAppAuth =>
+      Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
   @override
   void initState() {
@@ -86,6 +91,10 @@ class _BangumiAuthSettingsPageState extends State<BangumiAuthSettingsPage> {
   }
 
   Future<void> _startInAppAuth() async {
+    if (!_supportsInAppAuth) {
+      await _startBrowserAuth();
+      return;
+    }
     if (isLoading) return;
     try {
       setState(() {
@@ -302,9 +311,21 @@ class _BangumiAuthSettingsPageState extends State<BangumiAuthSettingsPage> {
                     runSpacing: 12,
                     children: [
                       FilledButton.icon(
-                        onPressed: isLoading ? null : _startInAppAuth,
-                        icon: const Icon(Icons.web_rounded),
-                        label: Text(isLoading ? '授权中…' : '应用内授权登录'),
+                        onPressed: isLoading
+                            ? null
+                            : (_supportsInAppAuth
+                                ? _startInAppAuth
+                                : _startBrowserAuth),
+                        icon: Icon(_supportsInAppAuth
+                            ? Icons.web_rounded
+                            : Icons.open_in_browser_rounded),
+                        label: Text(
+                          isLoading
+                              ? '授权中…'
+                              : (_supportsInAppAuth
+                                  ? '应用内授权登录'
+                                  : '浏览器授权登录'),
+                        ),
                       ),
                       OutlinedButton.icon(
                         onPressed: isLoading ? null : _startBrowserAuth,
