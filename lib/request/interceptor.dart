@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:kazumi/request/api.dart';
+import 'package:kazumi/request/bangumi_oauth.dart';
+import 'package:kazumi/request/request.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:kazumi/utils/storage.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
@@ -7,11 +11,18 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:kazumi/utils/utils.dart';
 import 'package:kazumi/utils/mortis.dart';
 import 'package:kazumi/utils/constants.dart';
+import 'package:kazumi/utils/logger.dart';
 
 class ApiInterceptor extends Interceptor {
   static Box setting = GStorage.setting;
+  static const String _skipBangumiTokenRefreshKey = 'skipBangumiTokenRefresh';
+  static const String _bangumiRetriedKey = 'bangumiRetried';
+  static final BangumiOAuthService _bangumiOAuthService =
+      BangumiOAuthService();
+  static Future<void>? _refreshingFuture;
+
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     // Github mirror
     if (options.path.contains('github')) {
       bool enableGitProxy =
@@ -32,8 +43,8 @@ class ApiInterceptor extends Interceptor {
             Uri.parse(options.path).path, timestamp),
       };
     }
-    if (options.path.contains(Api.bangumiAPIDomain) ||
-        options.path.contains(Api.bangumiAPINextDomain)) {
+    if (isBangumiRequest(options.path)) {
+      await _maybeRefreshBangumiToken(options);
       final headers = Map<String, dynamic>.from(bangumiHTTPHeader);
       final String accessToken =
           setting.get(SettingBoxKey.bangumiAccessToken, defaultValue: '');
@@ -55,6 +66,20 @@ class ApiInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (shouldRetryBangumiUnauthorized(
+      requestOptions: err.requestOptions,
+      statusCode: err.response?.statusCode,
+    )) {
+      try {
+        await _refreshBangumiToken();
+        final response = await _retryBangumiRequest(err.requestOptions);
+        handler.resolve(response);
+        return;
+      } catch (error, stackTrace) {
+        await _handleBangumiRefreshFailure(error, stackTrace);
+      }
+    }
+
     String url = err.requestOptions.uri.toString();
     if (!url.contains('heartBeat') &&
         err.requestOptions.extra['customError'] != '') {
@@ -119,5 +144,84 @@ class ApiInterceptor extends Interceptor {
       return '未连接到任何网络';
     }
     return '';
+  }
+
+  static bool isBangumiRequest(String url) {
+    return url.contains(Api.bangumiAPIDomain) ||
+        url.contains(Api.bangumiAPINextDomain);
+  }
+
+  static bool shouldRetryBangumiUnauthorized({
+    required RequestOptions requestOptions,
+    required int? statusCode,
+  }) {
+    return statusCode == 401 &&
+        isBangumiRequest(requestOptions.path) &&
+        requestOptions.extra[_skipBangumiTokenRefreshKey] != true &&
+        requestOptions.extra[_bangumiRetriedKey] != true;
+  }
+
+  static Future<void> _maybeRefreshBangumiToken(RequestOptions options) async {
+    if (options.extra[_skipBangumiTokenRefreshKey] == true) {
+      return;
+    }
+    if (!_bangumiOAuthService.hasRefreshToken()) {
+      return;
+    }
+    if (!_bangumiOAuthService.shouldRefreshToken()) {
+      return;
+    }
+    try {
+      await _refreshBangumiToken();
+    } catch (error, stackTrace) {
+      KazumiLogger().w(
+        'Bangumi OAuth: pre-refresh failed, keep using current token',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  static Future<void> _refreshBangumiToken() async {
+    final refreshingFuture = _refreshingFuture;
+    if (refreshingFuture != null) {
+      return refreshingFuture;
+    }
+    final future = _bangumiOAuthService.refreshAccessToken();
+    _refreshingFuture = future.then((_) {});
+    try {
+      await _refreshingFuture;
+    } finally {
+      _refreshingFuture = null;
+    }
+  }
+
+  static Future<Response<dynamic>> _retryBangumiRequest(
+    RequestOptions requestOptions,
+  ) async {
+    final headers = Map<String, dynamic>.from(requestOptions.headers);
+    final extra = Map<String, dynamic>.from(requestOptions.extra);
+    final String accessToken =
+        setting.get(SettingBoxKey.bangumiAccessToken, defaultValue: '');
+    if (accessToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $accessToken';
+    }
+    extra[_bangumiRetriedKey] = true;
+    requestOptions.headers = headers;
+    requestOptions.extra = extra;
+    return Request.dio.fetch<dynamic>(requestOptions);
+  }
+
+  static Future<void> _handleBangumiRefreshFailure(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    KazumiLogger().w(
+      'Bangumi OAuth: refresh after unauthorized failed',
+      error: error,
+      stackTrace: stackTrace,
+    );
+    await _bangumiOAuthService.logout();
+    KazumiDialog.showToast(message: 'Bangumi 登录已过期，请重新授权');
   }
 }

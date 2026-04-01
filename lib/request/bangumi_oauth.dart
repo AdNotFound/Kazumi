@@ -46,6 +46,18 @@ class BangumiOAuthService {
   static const int defaultLoopbackPort = 32547;
   static const String defaultRedirectUri =
       'http://127.0.0.1:$defaultLoopbackPort/callback';
+  static const Duration refreshThreshold = Duration(minutes: 30);
+
+  static bool shouldRefreshTokenByExpiresAt({
+    required int expiresAt,
+    required int now,
+    Duration threshold = refreshThreshold,
+  }) {
+    if (expiresAt <= 0) {
+      return false;
+    }
+    return expiresAt - now <= threshold.inMilliseconds;
+  }
 
   final _setting = GStorage.setting;
 
@@ -238,6 +250,98 @@ class BangumiOAuthService {
     await _setting.put(SettingBoxKey.bangumiNickname, '');
   }
 
+  bool hasRefreshToken() {
+    final String refreshToken =
+        _setting.get(SettingBoxKey.bangumiRefreshToken, defaultValue: '');
+    return refreshToken.isNotEmpty;
+  }
+
+  bool shouldRefreshToken({
+    Duration threshold = refreshThreshold,
+  }) {
+    final expiresAt = _setting.get(
+      SettingBoxKey.bangumiTokenExpiresAt,
+      defaultValue: 0,
+    );
+    if (expiresAt is! int || expiresAt <= 0) {
+      return false;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return shouldRefreshTokenByExpiresAt(
+      expiresAt: expiresAt,
+      now: now,
+      threshold: threshold,
+    );
+  }
+
+  Future<BangumiOAuthResult> refreshAccessToken() async {
+    final String clientId =
+        _setting.get(SettingBoxKey.bangumiOauthClientId, defaultValue: '');
+    final String clientSecret = _setting.get(
+      SettingBoxKey.bangumiOauthClientSecret,
+      defaultValue: '',
+    );
+    final String refreshToken =
+        _setting.get(SettingBoxKey.bangumiRefreshToken, defaultValue: '');
+    final String redirectUri = _setting.get(
+      SettingBoxKey.bangumiOauthRedirectUri,
+      defaultValue: defaultRedirectUri,
+    );
+
+    if (clientId.isEmpty || clientSecret.isEmpty) {
+      throw const BangumiOAuthException('请先填写 Client ID 和 Client Secret');
+    }
+    if (refreshToken.isEmpty) {
+      throw const BangumiOAuthException('当前缺少 Refresh Token，请重新授权');
+    }
+
+    try {
+      final Response response = await Request().post(
+        'https://bgm.tv/oauth/access_token',
+        data: {
+          'grant_type': 'refresh_token',
+          'client_id': clientId,
+          'client_secret': clientSecret,
+          'refresh_token': refreshToken,
+          'redirect_uri': redirectUri,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          headers: {
+            'accept': 'application/json',
+          },
+          extra: {
+            'skipBangumiTokenRefresh': true,
+          },
+        ),
+        shouldRethrow: true,
+      );
+      final tokenData = Map<String, dynamic>.from(response.data as Map);
+      final String nextAccessToken = tokenData['access_token'] ?? '';
+      final Map<String, dynamic> meData =
+          await _getCurrentUser(nextAccessToken, skipTokenRefresh: true);
+      final result = BangumiOAuthResult(
+        accessToken: nextAccessToken,
+        refreshToken: tokenData['refresh_token'] ?? refreshToken,
+        tokenType: tokenData['token_type'] ?? 'Bearer',
+        expiresIn: tokenData['expires_in'] is int
+            ? tokenData['expires_in'] as int
+            : int.tryParse('${tokenData['expires_in'] ?? 0}') ?? 0,
+        username: meData['username'] ?? '',
+        nickname: meData['nickname'] ?? '',
+      );
+      await saveAuthResult(result);
+      return result;
+    } on DioException catch (e) {
+      KazumiLogger().e('Bangumi OAuth: refresh token failed', error: e);
+      final responseData = e.response?.data;
+      if (responseData is Map && responseData['error_description'] != null) {
+        throw BangumiOAuthException('${responseData['error_description']}');
+      }
+      throw const BangumiOAuthException('刷新 Bangumi Access Token 失败');
+    }
+  }
+
   Future<Map<String, dynamic>> _exchangeCode({
     required String clientId,
     required String clientSecret,
@@ -273,7 +377,10 @@ class BangumiOAuthService {
     }
   }
 
-  Future<Map<String, dynamic>> _getCurrentUser(String accessToken) async {
+  Future<Map<String, dynamic>> _getCurrentUser(
+    String accessToken, {
+    bool skipTokenRefresh = false,
+  }) async {
     if (accessToken.isEmpty) {
       throw const BangumiOAuthException('Access Token 为空');
     }
@@ -283,6 +390,9 @@ class BangumiOAuthService {
         options: Options(
           headers: {
             'Authorization': 'Bearer $accessToken',
+          },
+          extra: {
+            'skipBangumiTokenRefresh': skipTokenRefresh,
           },
         ),
         shouldRethrow: true,
