@@ -9,6 +9,9 @@ import 'package:kazumi/modules/character/character_full_item.dart';
 import 'package:kazumi/modules/staff/staff_response.dart';
 
 class BangumiHTTP {
+  static final Map<int, List<EpisodeInfo>> _episodeCache =
+      <int, List<EpisodeInfo>>{};
+
   // why the api havn't been replaced by getCalendarBySearch?
   // Because getCalendarBySearch is not stable, it will miss some bangumi items.
   static Future<List<List<BangumiItem>>> getCalendar() async {
@@ -215,24 +218,84 @@ class BangumiHTTP {
     }
   }
 
-  static Future<EpisodeInfo> getBangumiEpisodeByID(int id, int episode) async {
-    EpisodeInfo episodeInfo = EpisodeInfo.fromTemplate();
-    var params = <String, dynamic>{
-      'subject_id': id,
-      'offset': episode - 1,
-      'limit': 1
-    };
+  static Future<List<EpisodeInfo>> getBangumiEpisodesBySubjectId(
+    int id, {
+    bool mainOnly = false,
+    bool forceRefresh = false,
+  }) async {
+    final cachedEpisodes = _episodeCache[id];
+    if (!forceRefresh && cachedEpisodes != null && cachedEpisodes.isNotEmpty) {
+      if (mainOnly) {
+        return cachedEpisodes
+            .where((episode) => episode.type == 0)
+            .toList(growable: false);
+      }
+      return List<EpisodeInfo>.from(cachedEpisodes);
+    }
+
+    final List<EpisodeInfo> episodeList = <EpisodeInfo>[];
+    int offset = 0;
     try {
-      final res = await Request().get(
-        Api.bangumiAPIDomain + Api.bangumiEpisodeByID,
-        data: params,
-      );
-      final jsonData = res.data['data'][0];
-      episodeInfo = EpisodeInfo.fromJson(jsonData);
+      while (true) {
+        final res = await Request().get(
+          Api.bangumiAPIDomain + Api.bangumiEpisodeByID,
+          data: <String, dynamic>{
+            'subject_id': id,
+            'offset': offset,
+            'limit': 100,
+          },
+        );
+        final dynamic rawData = res.data['data'];
+        final List<dynamic> jsonList = rawData is List ? rawData : const [];
+        if (jsonList.isEmpty) {
+          break;
+        }
+        for (final jsonItem in jsonList) {
+          try {
+            if (jsonItem is Map<String, dynamic>) {
+              episodeList.add(EpisodeInfo.fromJson(jsonItem));
+            } else if (jsonItem is Map) {
+              episodeList.add(EpisodeInfo.fromJson(
+                  Map<String, dynamic>.from(jsonItem)));
+            }
+          } catch (_) {}
+        }
+        if (jsonList.length < 100) {
+          break;
+        }
+        offset += jsonList.length;
+      }
+      if (episodeList.isNotEmpty) {
+        _episodeCache[id] = List<EpisodeInfo>.from(episodeList);
+      }
+    } catch (e) {
+      KazumiLogger().e('Network: resolve bangumi episodes failed', error: e);
+    }
+
+    if (mainOnly) {
+      return episodeList
+          .where((episode) => episode.type == 0)
+          .toList(growable: false);
+    }
+    return episodeList;
+  }
+
+  static Future<EpisodeInfo> getBangumiEpisodeByID(int id, int episode) async {
+    try {
+      final episodes =
+          await getBangumiEpisodesBySubjectId(id, mainOnly: true);
+      for (final episodeInfo in episodes) {
+        if (episodeInfo.episode.toInt() == episode) {
+          return episodeInfo;
+        }
+      }
+      if (episode > 0 && episode <= episodes.length) {
+        return episodes[episode - 1];
+      }
     } catch (e) {
       KazumiLogger().e('Network: resolve bangumi episode failed', error: e);
     }
-    return episodeInfo;
+    return EpisodeInfo.fromTemplate();
   }
 
   static Future<CommentResponse> getBangumiCommentsByID(int id,

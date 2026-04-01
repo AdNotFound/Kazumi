@@ -1,11 +1,13 @@
+import 'package:mobx/mobx.dart';
+
 class Road {
   String name;
   List<String> data;
-  List<String> identifier;
+  ObservableList<String> identifier;
 
   Road({
     required this.name,
     required this.data,
-    required this.identifier,
-  });
+    required List<String> identifier,
+  }) : identifier = ObservableList<String>.of(identifier);
 }

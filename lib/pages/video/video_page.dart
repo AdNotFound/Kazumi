@@ -26,6 +26,7 @@ import 'package:kazumi/pages/info/info_controller.dart';
 import 'package:kazumi/pages/info/source_sheet.dart';
 import 'package:kazumi/plugins/plugins.dart';
 import 'package:kazumi/plugins/plugins_controller.dart';
+import 'package:kazumi/request/bangumi.dart';
 import 'package:kazumi/request/query_manager.dart';
 import 'package:kazumi/repositories/bangumi_sync_repository.dart';
 import 'package:kazumi/utils/constants.dart';
@@ -72,6 +73,7 @@ class _VideoPageState extends State<VideoPage>
   late TabController sourceTabController;
   int detailSectionIndex = 0;
   Set<int> remoteWatchedEpisodes = <int>{};
+  Map<int, String> bangumiEpisodeTitles = <int, String>{};
 
   // 当前播放列表
   late int currentRoad;
@@ -93,6 +95,9 @@ class _VideoPageState extends State<VideoPage>
     sourceTabController =
         TabController(length: pluginsController.pluginList.length, vsync: this);
     unawaited(_loadRemoteWatchedEpisodes());
+    if (!videoPageController.isOfflineMode) {
+      unawaited(_loadBangumiEpisodeTitles());
+    }
     observerController = GridObserverController(controller: scrollController);
     animation = AnimationController(
       duration: const Duration(milliseconds: 120),
@@ -155,6 +160,57 @@ class _VideoPageState extends State<VideoPage>
     setState(() {
       remoteWatchedEpisodes = watchedEpisodes;
     });
+  }
+
+  Future<void> _loadBangumiEpisodeTitles() async {
+    final episodes = await BangumiHTTP.getBangumiEpisodesBySubjectId(
+      videoPageController.bangumiItem.id,
+      mainOnly: true,
+    );
+    if (!mounted) {
+      return;
+    }
+
+    final Map<int, String> titles = <int, String>{};
+    for (final episodeInfo in episodes) {
+      final episodeNumber = episodeInfo.episode.toInt();
+      if (episodeNumber <= 0) {
+        continue;
+      }
+      final title =
+          episodeInfo.nameCn.isNotEmpty ? episodeInfo.nameCn : episodeInfo.name;
+      if (title.isEmpty) {
+        continue;
+      }
+      titles[episodeNumber] = title;
+    }
+
+    setState(() {
+      bangumiEpisodeTitles = titles;
+    });
+    _applyBangumiEpisodeTitlesToRoadList();
+  }
+
+  void _applyBangumiEpisodeTitlesToRoadList() {
+    if (bangumiEpisodeTitles.isEmpty || videoPageController.roadList.isEmpty) {
+      return;
+    }
+
+    for (final road in videoPageController.roadList) {
+      for (int index = 0; index < road.identifier.length; index++) {
+        final parsedEpisodeNumber =
+            Utils.extractEpisodeNumber(road.identifier[index]);
+        final episodeNumber =
+            parsedEpisodeNumber > 0 ? parsedEpisodeNumber : index + 1;
+        final bangumiTitle = bangumiEpisodeTitles[episodeNumber];
+        if (bangumiTitle == null ||
+            bangumiTitle.isEmpty ||
+            road.identifier[index] == bangumiTitle) {
+          continue;
+        }
+        road.identifier[index] = bangumiTitle;
+      }
+    }
   }
 
   bool _isCurrentEpisodeWatched(int episodeNumber, bool isPlaying) {
@@ -261,6 +317,7 @@ class _VideoPageState extends State<VideoPage>
   }
 
   void _initOnlineMode() {
+    _applyBangumiEpisodeTitlesToRoadList();
     videoPageController.currentEpisode = 1;
     videoPageController.currentRoad = 0;
     videoPageController.historyOffset = 0;
@@ -358,6 +415,8 @@ class _VideoPageState extends State<VideoPage>
       videoPageController.errorMessage = '当前来源暂无可播放剧集，请切换其他来源';
       return;
     }
+
+    _applyBangumiEpisodeTitlesToRoadList();
 
     if (!_hasInitializedOnlinePlayback || isInitialSelection) {
       _initOnlineMode();
@@ -594,6 +653,11 @@ class _VideoPageState extends State<VideoPage>
   }
 
   String get _currentEpisodeTitle {
+    final cachedEpisodeTitle =
+        bangumiEpisodeTitles[videoPageController.currentEpisode];
+    if (cachedEpisodeTitle != null && cachedEpisodeTitle.isNotEmpty) {
+      return cachedEpisodeTitle;
+    }
     final accurateEpisodeTitle = videoPageController.episodeInfo.nameCn.isNotEmpty
         ? videoPageController.episodeInfo.nameCn
         : videoPageController.episodeInfo.name;
