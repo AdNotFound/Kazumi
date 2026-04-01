@@ -3,6 +3,7 @@ import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/pages/collect/collect_controller.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/modules/search/plugin_search_module.dart';
+import 'package:kazumi/repositories/bangumi_collection_sync_repository.dart';
 import 'package:kazumi/request/bangumi.dart';
 import 'package:mobx/mobx.dart';
 import 'package:kazumi/utils/logger.dart';
@@ -16,6 +17,8 @@ class InfoController = _InfoController with _$InfoController;
 
 abstract class _InfoController with Store {
   final CollectController collectController = Modular.get<CollectController>();
+  final IBangumiCollectionSyncRepository _bangumiCollectionSyncRepository =
+      Modular.get<IBangumiCollectionSyncRepository>();
   late BangumiItem bangumiItem;
 
   @observable
@@ -98,5 +101,14 @@ abstract class _InfoController with Store {
       staffList.addAll(value.data);
     });
     KazumiLogger().i('InfoController: loaded staff list length ${staffList.length}');
+  }
+
+  Future<bool> syncBangumiCollectionState() async {
+    final changed = await _bangumiCollectionSyncRepository
+        .syncRemoteCollectionToLocal(bangumiItem);
+    if (changed) {
+      collectController.loadCollectibles();
+    }
+    return changed;
   }
 }

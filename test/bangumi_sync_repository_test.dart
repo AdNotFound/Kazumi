@@ -1,7 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kazumi/repositories/bangumi_collection_sync_repository.dart';
 import 'package:kazumi/repositories/bangumi_sync_repository.dart';
 
 void main() {
+  group('BangumiCollectionSyncRepository status mapping', () {
+    test('远端收藏状态映射到本地状态', () {
+      expect(BangumiCollectionSyncRepository.mapRemoteTypeToLocal(1), 2);
+      expect(BangumiCollectionSyncRepository.mapRemoteTypeToLocal(2), 4);
+      expect(BangumiCollectionSyncRepository.mapRemoteTypeToLocal(3), 1);
+      expect(BangumiCollectionSyncRepository.mapRemoteTypeToLocal(4), 3);
+      expect(BangumiCollectionSyncRepository.mapRemoteTypeToLocal(5), 5);
+      expect(BangumiCollectionSyncRepository.mapRemoteTypeToLocal(999), 0);
+    });
+
+    test('本地收藏状态映射到远端状态', () {
+      expect(BangumiCollectionSyncRepository.mapLocalTypeToRemote(1), 3);
+      expect(BangumiCollectionSyncRepository.mapLocalTypeToRemote(2), 1);
+      expect(BangumiCollectionSyncRepository.mapLocalTypeToRemote(3), 4);
+      expect(BangumiCollectionSyncRepository.mapLocalTypeToRemote(4), 2);
+      expect(BangumiCollectionSyncRepository.mapLocalTypeToRemote(5), 5);
+      expect(BangumiCollectionSyncRepository.mapLocalTypeToRemote(0), isNull);
+    });
+  });
+
   group('BangumiSyncRepository.findEpisodeIdForProgress', () {
     test('优先根据本篇 ep 字段精确匹配', () {
       final id = BangumiSyncRepository.findEpisodeIdForProgress([

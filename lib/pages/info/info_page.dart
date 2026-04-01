@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui';
 import 'package:kazumi/utils/utils.dart';
 import 'package:flutter/material.dart';
@@ -129,6 +130,13 @@ class _InfoPageState extends State<InfoPage> with TickerProviderStateMixin {
         infoController.bangumiItem.votesCount.isEmpty) {
       queryBangumiInfoByID(infoController.bangumiItem.id, type: 'attach');
     }
+    unawaited(
+      infoController.syncBangumiCollectionState().then((changed) {
+        if (changed && mounted) {
+          setState(() {});
+        }
+      }),
+    );
     infoTabController = TabController(length: 5, vsync: this);
     showRating = GStorage.setting.get(SettingBoxKey.showRating, defaultValue: true);
     infoTabController.addListener(() {

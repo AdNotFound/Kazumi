@@ -16,6 +16,7 @@ import 'package:kazumi/pages/settings/settings_module.dart';
 import 'package:kazumi/shaders/shaders_controller.dart';
 import 'package:kazumi/pages/search/search_module.dart';
 import 'package:kazumi/repositories/collect_repository.dart';
+import 'package:kazumi/repositories/bangumi_collection_sync_repository.dart';
 import 'package:kazumi/repositories/search_history_repository.dart';
 import 'package:kazumi/repositories/collect_crud_repository.dart';
 import 'package:kazumi/repositories/bangumi_sync_repository.dart';
@@ -34,6 +35,9 @@ class IndexModule extends Module {
     i.addSingleton<ICollectRepository>(CollectRepository.new);
     i.addSingleton<ISearchHistoryRepository>(SearchHistoryRepository.new);
     i.addSingleton<ICollectCrudRepository>(CollectCrudRepository.new);
+    i.addSingleton<IBangumiCollectionSyncRepository>(
+      () => BangumiCollectionSyncRepository(i.get<ICollectCrudRepository>()),
+    );
     i.addSingleton<IHistoryRepository>(HistoryRepository.new);
     i.addSingleton<IBangumiSyncRepository>(BangumiSyncRepository.new);
     i.addSingleton<IDownloadRepository>(DownloadRepository.new);

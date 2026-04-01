@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/modules/collect/collect_module.dart';
 import 'package:kazumi/modules/collect/collect_change_module.dart';
 import 'package:kazumi/modules/collect/collect_type.dart';
+import 'package:kazumi/repositories/bangumi_collection_sync_repository.dart';
 import 'package:kazumi/utils/storage.dart';
 import 'package:kazumi/utils/webdav.dart';
 import 'package:kazumi/repositories/collect_crud_repository.dart';
@@ -19,6 +22,8 @@ class CollectController = _CollectController with _$CollectController;
 abstract class _CollectController with Store {
   final _collectCrudRepository = Modular.get<ICollectCrudRepository>();
   final _collectRepository = Modular.get<ICollectRepository>();
+  final _bangumiCollectionSyncRepository =
+      Modular.get<IBangumiCollectionSyncRepository>();
 
   Box setting = GStorage.setting;
   List<BangumiItem> get favorites => _collectCrudRepository.getFavorites();
@@ -51,6 +56,12 @@ abstract class _CollectController with Store {
         type,
         (DateTime.now().millisecondsSinceEpoch ~/ 1000));
     await _collectCrudRepository.addCollectChange(collectChange);
+    unawaited(
+      _bangumiCollectionSyncRepository.syncLocalCollectionToRemote(
+        bangumiItem,
+        type,
+      ),
+    );
     loadCollectibles();
   }
 
