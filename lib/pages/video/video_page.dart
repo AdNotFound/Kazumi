@@ -27,6 +27,7 @@ import 'package:kazumi/pages/info/source_sheet.dart';
 import 'package:kazumi/plugins/plugins.dart';
 import 'package:kazumi/plugins/plugins_controller.dart';
 import 'package:kazumi/request/query_manager.dart';
+import 'package:kazumi/repositories/bangumi_sync_repository.dart';
 import 'package:kazumi/utils/constants.dart';
 import 'package:kazumi/utils/timed_shutdown_service.dart';
 import 'package:mobx/mobx.dart';
@@ -45,6 +46,8 @@ class _VideoPageState extends State<VideoPage>
       Modular.get<VideoPageController>();
   final PlayerController playerController = Modular.get<PlayerController>();
   final HistoryController historyController = Modular.get<HistoryController>();
+  final IBangumiSyncRepository bangumiSyncRepository =
+      Modular.get<IBangumiSyncRepository>();
   final DownloadController downloadController =
       Modular.get<DownloadController>();
   final PluginsController pluginsController = Modular.get<PluginsController>();
@@ -68,6 +71,7 @@ class _VideoPageState extends State<VideoPage>
   late TabController tabController;
   late TabController sourceTabController;
   int detailSectionIndex = 0;
+  Set<int> remoteWatchedEpisodes = <int>{};
 
   // 当前播放列表
   late int currentRoad;
@@ -88,6 +92,7 @@ class _VideoPageState extends State<VideoPage>
     tabController = TabController(length: 2, vsync: this);
     sourceTabController =
         TabController(length: pluginsController.pluginList.length, vsync: this);
+    unawaited(_loadRemoteWatchedEpisodes());
     observerController = GridObserverController(controller: scrollController);
     animation = AnimationController(
       duration: const Duration(milliseconds: 120),
@@ -139,6 +144,37 @@ class _VideoPageState extends State<VideoPage>
         );
       }
     });
+  }
+
+  Future<void> _loadRemoteWatchedEpisodes() async {
+    final watchedEpisodes = await bangumiSyncRepository
+        .getRemoteWatchedEpisodeNumbers(videoPageController.bangumiItem.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      remoteWatchedEpisodes = watchedEpisodes;
+    });
+  }
+
+  bool _isCurrentEpisodeWatched(int episodeNumber, bool isPlaying) {
+    if (!isPlaying || playerController.duration <= Duration.zero) {
+      return false;
+    }
+    return BangumiSyncRepository.shouldAutoSync(
+      episode: episodeNumber,
+      progress: playerController.currentPosition,
+      duration: playerController.duration,
+    );
+  }
+
+  Duration? _getEpisodeProgress(int episodeNumber) {
+    final progress = historyController.findProgress(
+      videoPageController.bangumiItem,
+      videoPageController.currentPlugin.name,
+      episodeNumber,
+    );
+    return progress?.progress;
   }
 
   void _initOfflineMode() {
@@ -1571,6 +1607,21 @@ class _VideoPageState extends State<VideoPage>
                     final isPlaying =
                         episodeNumber == videoPageController.currentEpisode &&
                             currentRoad == videoPageController.currentRoad;
+                    final episodeProgress = _getEpisodeProgress(episodeNumber);
+                    final hasLocalProgress =
+                        episodeProgress != null && episodeProgress > Duration.zero;
+                    final isWatched = remoteWatchedEpisodes.contains(episodeNumber) ||
+                        _isCurrentEpisodeWatched(episodeNumber, isPlaying);
+                    final localProgressText = hasLocalProgress
+                        ? Utils.durationToString(episodeProgress!)
+                        : '';
+                    final String statusText = isPlaying
+                        ? '正在播放'
+                        : isWatched
+                            ? '已看'
+                            : hasLocalProgress
+                                ? '看到 $localProgressText'
+                                : '点击切换';
                     final colorScheme = Theme.of(context).colorScheme;
                     return Material(
                       color: Colors.transparent,
@@ -1648,6 +1699,13 @@ class _VideoPageState extends State<VideoPage>
                                             color: colorScheme.primary,
                                           ),
                                           const SizedBox(width: 4),
+                                        ] else if (isWatched) ...[
+                                          Icon(
+                                            Icons.check_circle_rounded,
+                                            size: 16,
+                                            color: colorScheme.tertiary,
+                                          ),
+                                          const SizedBox(width: 4),
                                         ],
                                         Expanded(
                                           child: Text(
@@ -1672,11 +1730,13 @@ class _VideoPageState extends State<VideoPage>
                                     Row(
                                       children: [
                                         Text(
-                                          isPlaying ? '正在播放' : '点击切换',
+                                          statusText,
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: isPlaying
                                                 ? colorScheme.primary
+                                                : isWatched
+                                                    ? colorScheme.tertiary
                                                 : colorScheme.onSurfaceVariant,
                                           ),
                                         ),

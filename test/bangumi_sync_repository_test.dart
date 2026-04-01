@@ -53,6 +53,34 @@ void main() {
     });
   });
 
+  group('BangumiSyncRepository.mapWatchedEpisodeIdsToEpisodeNumbers', () {
+    test('将远端章节已看 ID 映射为本地集号', () {
+      final watchedEpisodes = BangumiSyncRepository.mapWatchedEpisodeIdsToEpisodeNumbers(
+        [
+          {'id': 10, 'type': 0, 'sort': 1, 'ep': 1},
+          {'id': 11, 'type': 0, 'sort': 2, 'ep': 2},
+          {'id': 12, 'type': 1, 'sort': 1},
+          {'id': 13, 'type': 0, 'sort': 3, 'ep': 3},
+        ],
+        {10, 13},
+      );
+
+      expect(watchedEpisodes, {1, 3});
+    });
+
+    test('缺少 ep 时回退到 sort 或顺序号', () {
+      final watchedEpisodes = BangumiSyncRepository.mapWatchedEpisodeIdsToEpisodeNumbers(
+        [
+          {'id': 21, 'type': 0, 'sort': 1},
+          {'id': 22, 'type': 0, 'sort': 0},
+        ],
+        {21, 22},
+      );
+
+      expect(watchedEpisodes, {1, 2});
+    });
+  });
+
   group('BangumiSyncRepository.shouldAutoSync', () {
     test('达到 80% 观看进度才允许自动同步', () {
       expect(

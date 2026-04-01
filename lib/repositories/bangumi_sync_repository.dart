@@ -9,6 +9,8 @@ import 'package:kazumi/utils/storage.dart';
 
 abstract class IBangumiSyncRepository {
   Future<void> scheduleAutoSync(History history, Duration duration);
+
+  Future<Set<int>> getRemoteWatchedEpisodeNumbers(int bangumiId);
 }
 
 class BangumiSyncRepository implements IBangumiSyncRepository {
@@ -69,6 +71,29 @@ class BangumiSyncRepository implements IBangumiSyncRepository {
         );
       }),
     );
+  }
+
+  @override
+  Future<Set<int>> getRemoteWatchedEpisodeNumbers(int bangumiId) async {
+    if (!_hasAccessToken) {
+      return <int>{};
+    }
+
+    try {
+      final episodes = await _fetchEpisodes(
+        subjectId: bangumiId,
+        requiredMainEpisodeCount: 1 << 30,
+      );
+      final watchedEpisodeIds = await _fetchWatchedEpisodeIds(bangumiId);
+      return mapWatchedEpisodeIdsToEpisodeNumbers(episodes, watchedEpisodeIds);
+    } catch (e, stackTrace) {
+      KazumiLogger().w(
+        'Bangumi Sync: fetch remote watched episodes failed. bangumiId=$bangumiId',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return <int>{};
+    }
   }
 
   Future<void> _syncEpisode(History history) async {
@@ -340,6 +365,46 @@ class BangumiSyncRepository implements IBangumiSyncRepository {
       return _toInt(mainEpisodes[watchedEpisode - 1]['id']);
     }
     return null;
+  }
+
+  static Set<int> mapWatchedEpisodeIdsToEpisodeNumbers(
+    List<Map<String, dynamic>> episodes,
+    Set<int> watchedEpisodeIds,
+  ) {
+    if (episodes.isEmpty || watchedEpisodeIds.isEmpty) {
+      return <int>{};
+    }
+
+    final List<Map<String, dynamic>> mainEpisodes = List<Map<String, dynamic>>.from(
+      episodes
+          .where((episode) => _toInt(episode['type']) == _mainEpisodeType)
+          .toList(),
+    )
+      ..sort((a, b) {
+        final sortCompare = _toNum(a['sort']).compareTo(_toNum(b['sort']));
+        if (sortCompare != 0) {
+          return sortCompare;
+        }
+        return _toInt(a['id']).compareTo(_toInt(b['id']));
+      });
+
+    final Set<int> watchedEpisodeNumbers = <int>{};
+    for (int index = 0; index < mainEpisodes.length; index++) {
+      final episode = mainEpisodes[index];
+      final episodeId = _toInt(episode['id']);
+      if (!watchedEpisodeIds.contains(episodeId)) {
+        continue;
+      }
+
+      final epNumber = _toInt(episode['ep']);
+      final sortNumber = _toInt(episode['sort']);
+      watchedEpisodeNumbers.add(
+        epNumber > 0
+            ? epNumber
+            : (sortNumber > 0 ? sortNumber : index + 1),
+      );
+    }
+    return watchedEpisodeNumbers;
   }
 
   static List<Map<String, dynamic>> _extractList(dynamic responseData) {
