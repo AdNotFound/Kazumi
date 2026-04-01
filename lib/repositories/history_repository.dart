@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter_modular/flutter_modular.dart';
+import 'package:kazumi/repositories/bangumi_sync_repository.dart';
 import 'package:kazumi/utils/storage.dart';
 import 'package:kazumi/modules/bangumi/bangumi_item.dart';
 import 'package:kazumi/modules/history/history_module.dart';
@@ -76,6 +80,7 @@ abstract class IHistoryRepository {
 class HistoryRepository implements IHistoryRepository {
   final _historiesBox = GStorage.histories;
   final _settingBox = GStorage.setting;
+  final _bangumiSyncRepository = Modular.get<IBangumiSyncRepository>();
 
   @override
   List<History> getAllHistories() {
@@ -152,6 +157,9 @@ class HistoryRepository implements IHistoryRepository {
 
       // 保存到存储
       await _historiesBox.put(history.key, history);
+
+      // 登录并启用后自动同步到 Bangumi，避免阻塞本地历史写入。
+      unawaited(_bangumiSyncRepository.scheduleAutoSync(history));
     } catch (e, stackTrace) {
       KazumiLogger().e(
         'GStorage: update history failed. bangumi=${bangumiItem.name}, episode=$episode',

@@ -341,5 +341,14 @@ class SettingBoxKey {
       downloadParallelEpisodes = 'downloadParallelEpisodes',
       downloadParallelSegments = 'downloadParallelSegments',
       downloadDanmaku = 'downloadDanmaku',
+      bangumiOauthClientId = 'bangumiOauthClientId',
+      bangumiOauthClientSecret = 'bangumiOauthClientSecret',
+      bangumiOauthRedirectUri = 'bangumiOauthRedirectUri',
+      bangumiAccessToken = 'bangumiAccessToken',
+      bangumiRefreshToken = 'bangumiRefreshToken',
+      bangumiTokenType = 'bangumiTokenType',
+      bangumiTokenExpiresAt = 'bangumiTokenExpiresAt',
+      bangumiUsername = 'bangumiUsername',
+      bangumiNickname = 'bangumiNickname',
       shortcutDialogShown = 'shortcutDialogShown';
 }

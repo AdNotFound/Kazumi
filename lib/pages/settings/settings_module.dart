@@ -15,6 +15,8 @@ import 'package:kazumi/pages/webdav_editor/webdav_module.dart';
 import 'package:kazumi/pages/settings/keyboard_settings.dart';
 import 'package:kazumi/pages/settings/download_settings.dart';
 import 'package:kazumi/pages/download/download_page_module.dart';
+import 'package:kazumi/pages/settings/bangumi_auth_settings_page.dart';
+import 'package:kazumi/pages/settings/bangumi_auth_webview_page.dart';
 
 class SettingsModule extends Module {
   @override
@@ -38,5 +40,10 @@ class SettingsModule extends Module {
     r.module("/danmaku", module: DanmakuModule());
     r.module("/download", module: DownloadModule());
     r.child("/download-settings", child: (_) => const DownloadSettingsPage());
+    r.child("/bangumi-auth", child: (_) => const BangumiAuthSettingsPage());
+    r.child(
+      "/bangumi-auth/webview",
+      child: (_) => const BangumiAuthWebViewPage(),
+    );
   }
 }

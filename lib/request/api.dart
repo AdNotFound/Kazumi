@@ -31,6 +31,14 @@ class Api {
   static const String bangumiCharacterByID = '/v0/subjects/{0}/characters';
   /// 从条目ID获取剧集ID
   static const String bangumiEpisodeByID = '/v0/episodes';
+  /// 当前用户信息
+  static const String bangumiCurrentUser = '/v0/me';
+  /// 用户单个条目收藏
+  static const String bangumiUserCollection = '/v0/users/{0}/collections/{1}';
+  /// 当前登录用户写入条目收藏
+  static const String bangumiCurrentUserCollection = '/v0/users/-/collections/{0}';
+  /// 当前登录用户章节收藏
+  static const String bangumiCurrentUserEpisodeCollection = '/v0/users/-/collections/{0}/episodes';
 
   /// Bangumi Next API Domain
   static const String bangumiAPINextDomain = 'https://next.bgm.tv';

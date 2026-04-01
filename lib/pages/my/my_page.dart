@@ -160,6 +160,15 @@ class _MyPageState extends State<MyPage> {
                   description:
                       Text('设置同步参数', style: TextStyle(fontFamily: fontFamily)),
                 ),
+                SettingsTile.navigation(
+                  onPressed: (_) {
+                    Modular.to.pushNamed('/settings/bangumi-auth');
+                  },
+                  leading: const Icon(Icons.manage_accounts_rounded),
+                  title: Text('Bangumi 账号', style: TextStyle(fontFamily: fontFamily)),
+                  description: Text('配置浏览器授权登录与后续进度同步',
+                      style: TextStyle(fontFamily: fontFamily)),
+                ),
               ],
             ),
             SettingsSection(

@@ -183,6 +183,54 @@ class Request {
     }
   }
 
+  Future<Response> patch(url, {data, queryParameters, options, cancelToken, bool shouldRethrow = false}) async {
+    Response response;
+    try {
+      response = await dio.patch(
+        url,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+      );
+      return response;
+    } on DioException catch (e) {
+      if (shouldRethrow) {
+        rethrow;
+      }
+      Response errResponse = Response(
+        data: {'message': await ApiInterceptor.dioError(e)},
+        statusCode: 200,
+        requestOptions: RequestOptions(),
+      );
+      return errResponse;
+    }
+  }
+
+  Future<Response> put(url, {data, queryParameters, options, cancelToken, bool shouldRethrow = false}) async {
+    Response response;
+    try {
+      response = await dio.put(
+        url,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+        cancelToken: cancelToken,
+      );
+      return response;
+    } on DioException catch (e) {
+      if (shouldRethrow) {
+        rethrow;
+      }
+      Response errResponse = Response(
+        data: {'message': await ApiInterceptor.dioError(e)},
+        statusCode: 200,
+        requestOptions: RequestOptions(),
+      );
+      return errResponse;
+    }
+  }
+
   String headerUa({type = 'mob'}) {
     return Utils.getRandomUA();
   }
