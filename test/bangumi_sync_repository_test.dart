@@ -33,20 +33,30 @@ void main() {
   });
 
   group('BangumiSyncRepository.shouldAutoSync', () {
-    test('达到一分钟阈值才允许自动同步', () {
+    test('达到 80% 观看进度才允许自动同步', () {
       expect(
         BangumiSyncRepository.shouldAutoSync(
           episode: 1,
-          progress: const Duration(seconds: 59),
+          progress: const Duration(minutes: 15, seconds: 59),
+          duration: const Duration(minutes: 20),
         ),
         isFalse,
       );
       expect(
         BangumiSyncRepository.shouldAutoSync(
           episode: 1,
-          progress: const Duration(minutes: 1),
+          progress: const Duration(minutes: 16),
+          duration: const Duration(minutes: 20),
         ),
         isTrue,
+      );
+      expect(
+        BangumiSyncRepository.shouldAutoSync(
+          episode: 1,
+          progress: const Duration(minutes: 16),
+          duration: Duration.zero,
+        ),
+        isFalse,
       );
     });
   });

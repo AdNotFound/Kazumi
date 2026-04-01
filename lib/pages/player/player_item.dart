@@ -824,6 +824,7 @@ class _PlayerItemState extends State<PlayerItem>
               pluginName,
               videoPageController.bangumiItem,
               playerController.playerPosition,
+              playerController.playerDuration,
               videoPageController.src,
               videoPageController.roadList[videoPageController.currentRoad]
                   .identifier[videoPageController.currentEpisode - 1]);

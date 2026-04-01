@@ -8,11 +8,11 @@ import 'package:kazumi/utils/logger.dart';
 import 'package:kazumi/utils/storage.dart';
 
 abstract class IBangumiSyncRepository {
-  Future<void> scheduleAutoSync(History history);
+  Future<void> scheduleAutoSync(History history, Duration duration);
 }
 
 class BangumiSyncRepository implements IBangumiSyncRepository {
-  static const Duration minimumProgress = Duration(minutes: 1);
+  static const double minimumWatchRatio = 0.8;
   static const Duration minimumSyncInterval = Duration(minutes: 2);
   static const int _mainEpisodeType = 0;
   static const int _episodeWatchedType = 2;
@@ -33,14 +33,18 @@ class BangumiSyncRepository implements IBangumiSyncRepository {
   }
 
   @override
-  Future<void> scheduleAutoSync(History history) async {
+  Future<void> scheduleAutoSync(History history, Duration duration) async {
     if (!_hasAccessToken) {
       return;
     }
 
     final episode = history.lastWatchEpisode;
     final progress = history.progresses[episode]?.progress;
-    if (!shouldAutoSync(episode: episode, progress: progress)) {
+    if (!shouldAutoSync(
+      episode: episode,
+      progress: progress,
+      duration: duration,
+    )) {
       return;
     }
 
@@ -287,8 +291,13 @@ class BangumiSyncRepository implements IBangumiSyncRepository {
   static bool shouldAutoSync({
     required int episode,
     required Duration? progress,
+    required Duration duration,
   }) {
-    return episode > 0 && progress != null && progress >= minimumProgress;
+    if (episode <= 0 || progress == null || duration <= Duration.zero) {
+      return false;
+    }
+    return progress.inMilliseconds >=
+        (duration.inMilliseconds * minimumWatchRatio).round();
   }
 
   static int? findEpisodeIdForProgress(

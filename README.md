@@ -51,6 +51,7 @@
 - [x] 一起看
 - [ ] 番剧下载
 - [ ] 番剧更新提醒
+- [ ] Bangumi OAuth Token 自动刷新
 - [ ] 还有更多 (/・ω・＼) 
 
 ## 下载
@@ -188,7 +189,6 @@ A: 本项目编译需要良好的网络环境, 除了由 Google 托管的 Flutte
 感谢 [avbuild](https://github.com/wang-bin/avbuild) 本项目使用了来自 avbuild 的树外补丁实现非标准视频流播放。
 
 感谢 [hive](https://github.com/isar/hive) 本项目持久化储存能力来自 hive。
-
 
 
 

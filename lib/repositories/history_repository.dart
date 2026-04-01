@@ -28,6 +28,7 @@ abstract class IHistoryRepository {
   /// [adapterName] 适配器名称
   /// [bangumiItem] 番剧信息
   /// [progress] 观看进度
+  /// [duration] 当前视频总时长
   /// [lastSrc] 最后观看源
   /// [lastWatchEpisodeName] 最后观看集名称
   Future<void> updateHistory({
@@ -36,6 +37,7 @@ abstract class IHistoryRepository {
     required String adapterName,
     required BangumiItem bangumiItem,
     required Duration progress,
+    required Duration duration,
     required String lastSrc,
     required String lastWatchEpisodeName,
   });
@@ -123,6 +125,7 @@ class HistoryRepository implements IHistoryRepository {
     required String adapterName,
     required BangumiItem bangumiItem,
     required Duration progress,
+    required Duration duration,
     required String lastSrc,
     required String lastWatchEpisodeName,
   }) async {
@@ -159,7 +162,7 @@ class HistoryRepository implements IHistoryRepository {
       await _historiesBox.put(history.key, history);
 
       // 登录并启用后自动同步到 Bangumi，避免阻塞本地历史写入。
-      unawaited(_bangumiSyncRepository.scheduleAutoSync(history));
+      unawaited(_bangumiSyncRepository.scheduleAutoSync(history, duration));
     } catch (e, stackTrace) {
       KazumiLogger().e(
         'GStorage: update history failed. bangumi=${bangumiItem.name}, episode=$episode',
